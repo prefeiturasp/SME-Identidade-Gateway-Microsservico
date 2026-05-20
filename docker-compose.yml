@@ -1,0 +1,53 @@
+services:
+  gateway-ms-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gateway_db
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway
+    ports:
+      - "5435:5432"
+    volumes:
+      - gateway_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway-ms-cache:
+    image: eqalpha/keydb:latest
+    command: ["keydb-server", "--appendonly", "yes"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - gateway_keydb:/data
+
+  gateway-ms-api:
+    build: .
+    depends_on:
+      gateway-ms-db:
+        condition: service_healthy
+      gateway-ms-cache:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://gateway:gateway@gateway-ms-db:5432/gateway_db
+      CACHE_URL: redis://gateway-ms-cache:6379/0
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL:-http://keycloak:8080/}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-sme-apps}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-gateway-ms}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      TOKEN_MS_URL: ${TOKEN_MS_URL:-http://token-ms-api:8003}
+      TOKEN_MS_INTERNAL_TOKEN: ${TOKEN_MS_INTERNAL_TOKEN:-}
+      DEBUG: ${DEBUG:-False}
+    ports:
+      - "8002:8002"
+
+networks:
+  default:
+    name: sme-identidade
+    external: true
+
+volumes:
+  gateway_pg:
+  gateway_keydb:
