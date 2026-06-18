@@ -4,7 +4,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import AllowAny
 
-API_PREFIX = "api/v1/"
+API_PREFIX = "identidade-gateway/api/v1/"
 
 urlpatterns = [
     path(
