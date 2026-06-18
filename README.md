@@ -78,4 +78,4 @@ Use `make help` para listar todos os comandos disponíveis. Os principais:
 
 ## Endpoints
 
-Consulte o Swagger em `/api/v1/docs/` para a lista completa de rotas com parâmetros e exemplos de resposta.
+Consulte o Swagger em `/identidade-gateway/api/v1/docs/` para a lista completa de rotas com parâmetros e exemplos de resposta.
