@@ -10,5 +10,6 @@ Sua função é validar identidades, processar credenciais, propagar contexto au
 :maxdepth: 2
 :caption: Conteúdo
 
+autenticacao
 api
 ```

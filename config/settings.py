@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "drf_spectacular",
     "apps.core",
+    "apps.autenticacao",
 ]
 
 MIDDLEWARE = [
@@ -64,4 +65,48 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.autenticacao.api_key.AutenticacaoApiKey",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
 }
+
+# Autenticação de serviço a serviço (mesmo padrão do ETL e esperado
+# no Token-MS): header configurável comparado a uma chave fixa.
+API_KEY = os.getenv("API_KEY", "")
+API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
+
+# Destino do roteamento — Token-MS ainda em desenvolvimento por
+# outro time; usado quando os mocks do app `autenticacao` forem
+# substituídos por chamadas reais.
+TOKEN_MS_URL = os.getenv("TOKEN_MS_URL", "http://token-ms:8000")
+TOKEN_MS_TIMEOUT = float(os.getenv("TOKEN_MS_TIMEOUT", "10"))
+
+# Keycloak Admin API — usado nas rotas de gestão de senha/e-mail
+# (recuperação de senha, alteração de senha, alteração de e-mail) e
+# para resolver a conta do usuário (login/dados). Mesmas variáveis de
+# ambiente já usadas no SME-Identidade-ETL, para manter um único
+# padrão de configuração de Keycloak na plataforma.
+KEYCLOAK_URL_SERVIDOR = os.getenv(
+    "KEYCLOAK_URL_SERVIDOR", "https://localhost:8080/"
+)
+KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "COTIC")
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "identidade-gateway")
+KEYCLOAK_USUARIO_ADMIN = os.getenv("KEYCLOAK_USUARIO_ADMIN", "admin")
+KEYCLOAK_SENHA_ADMIN = os.getenv("KEYCLOAK_SENHA_ADMIN", "admin")
+KEYCLOAK_VERIFICAR_SSL = (
+    os.getenv("KEYCLOAK_VERIFICAR_SSL", "true").lower() == "true"
+)
+
+# Client OIDC usado para autenticar usuário final via grant type
+# password (LoginView) — precisa ter "Direct Access Grants" habilitado
+# no Keycloak. Distinto de KEYCLOAK_CLIENT_ID (usado só em required
+# actions da Admin API). auto-servico-qa é o client com os protocol
+# mappers de realm_access/resource_access (roles) configurados —
+# confidencial, exige client_secret.
+KEYCLOAK_LOGIN_CLIENT_ID = os.getenv(
+    "KEYCLOAK_LOGIN_CLIENT_ID", "auto-servico-qa"
+)
+KEYCLOAK_LOGIN_CLIENT_SECRET = os.getenv("KEYCLOAK_LOGIN_CLIENT_SECRET", "")
