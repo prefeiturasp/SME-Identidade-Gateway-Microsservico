@@ -25,4 +25,12 @@ urlpatterns = [
         name="swagger-ui",
     ),
     path(f"{API_PREFIX}", include("apps.core.api.urls")),
+    path(
+        f"{API_PREFIX}autenticacao/",
+        include("apps.autenticacao.api.urls"),
+    ),
+    path(
+        f"{API_PREFIX}usuarios/",
+        include("apps.gestao_usuario.api.urls"),
+    ),
 ]
