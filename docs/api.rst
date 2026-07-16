@@ -34,3 +34,15 @@ Autenticação
 
 .. automodule:: apps.autenticacao.api.serializers
    :members:
+
+Gestão de Usuário
+------------------
+
+.. automodule:: apps.gestao_usuario.cliente_etl
+   :members:
+
+.. automodule:: apps.gestao_usuario.api.views
+   :members:
+
+.. automodule:: apps.gestao_usuario.api.serializers
+   :members:

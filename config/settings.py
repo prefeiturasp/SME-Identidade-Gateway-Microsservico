@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "apps.core",
     "apps.autenticacao",
+    "apps.gestao_usuario",
 ]
 
 MIDDLEWARE = [
@@ -110,3 +111,15 @@ KEYCLOAK_LOGIN_CLIENT_ID = os.getenv(
     "KEYCLOAK_LOGIN_CLIENT_ID", "auto-servico-qa"
 )
 KEYCLOAK_LOGIN_CLIENT_SECRET = os.getenv("KEYCLOAK_LOGIN_CLIENT_SECRET", "")
+
+# SME-Identidade-ETL — destino da gestão de usuário (criação,
+# sincronização, concessão de acesso e consulta de identidade). O
+# Gateway não fala com o Keycloak Admin API para provisionamento de
+# identidade; delega inteiramente ao ETL, que já tem essa lógica.
+ETL_URL = os.getenv("ETL_URL", "http://identidade-etl:8000")
+ETL_TIMEOUT = float(os.getenv("ETL_TIMEOUT", "30"))
+
+# API Key própria para a chamada de serviço Gateway → ETL — distinta
+# da API_KEY que os clientes usam para chamar o Gateway.
+API_KEY_ETL = os.getenv("API_KEY_ETL", "")
+API_KEY_ETL_HEADER = os.getenv("API_KEY_ETL_HEADER", "X-API-Key")
