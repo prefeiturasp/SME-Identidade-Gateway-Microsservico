@@ -24,6 +24,7 @@ from apps.autenticacao.api.serializers import (
     RecuperarSenhaRequestSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
+from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
 
 
 class RecuperarSenhaView(APIView):
@@ -58,7 +59,7 @@ class RecuperarSenhaView(APIView):
                 entrada.validated_data["login"]
             )
         except KeycloakGetError:
-            return Response({"erro": "usuário não encontrado"}, status=404)
+            return Response({"erro": ERRO_USUARIO_NAO_ENCONTRADO}, status=404)
 
         saida = OperacaoConfirmadaResponseSerializer(
             {"situacao": "solicitacao_enviada"}
@@ -98,7 +99,7 @@ class AlterarSenhaView(APIView):
                 entrada.validated_data["senha"],
             )
         except KeycloakGetError:
-            return Response({"erro": "usuário não encontrado"}, status=404)
+            return Response({"erro": ERRO_USUARIO_NAO_ENCONTRADO}, status=404)
 
         saida = OperacaoConfirmadaResponseSerializer(
             {"situacao": "senha_alterada"}
@@ -137,7 +138,7 @@ class AlterarEmailView(APIView):
                 entrada.validated_data["email"],
             )
         except KeycloakGetError:
-            return Response({"erro": "usuário não encontrado"}, status=404)
+            return Response({"erro": ERRO_USUARIO_NAO_ENCONTRADO}, status=404)
 
         saida = OperacaoConfirmadaResponseSerializer(
             {"situacao": "email_alterado"}

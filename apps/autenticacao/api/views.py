@@ -31,6 +31,7 @@ from apps.autenticacao.api.serializers import (
     PerfisPorLoginResponseSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
+from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
 
 
 class LoginView(APIView):
@@ -70,7 +71,7 @@ class LoginView(APIView):
         if not resultado["autenticado"]:
             status_code = (
                 404
-                if resultado.get("erro") == "usuário não encontrado"
+                if resultado.get("erro") == ERRO_USUARIO_NAO_ENCONTRADO
                 else 401
             )
             return Response({"detalhe": resultado["erro"]}, status=status_code)
@@ -103,7 +104,9 @@ class DadosUsuarioView(APIView):
         """
         dados = keycloak_admin.obter_dados_usuario(login)
         if not dados:
-            return Response({"detalhe": "usuário não encontrado"}, status=404)
+            return Response(
+                {"detalhe": ERRO_USUARIO_NAO_ENCONTRADO}, status=404
+            )
 
         saida = DadosUsuarioResponseSerializer(dados)
         return Response(saida.data)

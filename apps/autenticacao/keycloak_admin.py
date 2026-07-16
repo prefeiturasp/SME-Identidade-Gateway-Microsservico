@@ -20,6 +20,8 @@ from typing import Any
 
 from django.conf import settings
 
+ERRO_USUARIO_NAO_ENCONTRADO = "usuário não encontrado"
+
 
 def obter_admin_keycloak() -> Any:
     """Retorna um cliente Keycloak Admin autenticado.
@@ -211,7 +213,7 @@ def autenticar(login: str, senha: str) -> dict[str, Any]:
     admin = obter_admin_keycloak()
     conta = buscar_usuario_por_login(admin, login)
     if not conta:
-        return {"autenticado": False, "erro": "usuário não encontrado"}
+        return {"autenticado": False, "erro": ERRO_USUARIO_NAO_ENCONTRADO}
 
     kc_openid = KeycloakOpenID(
         server_url=settings.KEYCLOAK_URL_SERVIDOR,

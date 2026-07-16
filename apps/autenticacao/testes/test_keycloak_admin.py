@@ -97,7 +97,7 @@ class TestRedefinirSenhaTemporaria:
 
         admin.set_user_password.assert_called_once_with(
             user_id="uuid-usuario",
-            password="senha123",
+            password="senha123",  # NOSONAR
             temporary=True,
         )
 
