@@ -96,7 +96,6 @@ KEYCLOAK_URL_SERVIDOR = os.getenv(
     "KEYCLOAK_URL_SERVIDOR", "https://localhost:8080/"
 )
 KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "COTIC")
-KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "identidade-gateway")
 KEYCLOAK_USUARIO_ADMIN = os.getenv("KEYCLOAK_USUARIO_ADMIN", "admin")
 KEYCLOAK_SENHA_ADMIN = os.getenv("KEYCLOAK_SENHA_ADMIN", "admin")
 KEYCLOAK_VERIFICAR_SSL = (
@@ -104,11 +103,15 @@ KEYCLOAK_VERIFICAR_SSL = (
 )
 
 # Client OIDC usado para autenticar usuário final via grant type
-# password (LoginView) — precisa ter "Direct Access Grants" habilitado
-# no Keycloak. Distinto de KEYCLOAK_CLIENT_ID (usado só em required
-# actions da Admin API). auto-servico-qa é o client com os protocol
-# mappers de realm_access/resource_access (roles) configurados —
-# confidencial, exige client_secret.
+# password (LoginView) e como client_id nas required actions de
+# credencial (send_update_account/send_verify_email) — precisa ter
+# "Direct Access Grants" habilitado e existir de fato no realm.
+# auto-servico-qa é o client com os protocol mappers de
+# realm_access/resource_access (roles) configurados — confidencial,
+# exige client_secret. Um client dedicado "identidade-gateway" chegou
+# a ser cogitado para as required actions, mas não existe no realm
+# COTIC de QA (KeycloakPutError: "Client doesn't exist") — reusar o
+# client de login evita depender de um cadastro extra no Keycloak.
 KEYCLOAK_LOGIN_CLIENT_ID = os.getenv(
     "KEYCLOAK_LOGIN_CLIENT_ID", "auto-servico-qa"
 )
@@ -118,7 +121,9 @@ KEYCLOAK_LOGIN_CLIENT_SECRET = os.getenv("KEYCLOAK_LOGIN_CLIENT_SECRET", "")
 # sincronização, concessão de acesso e consulta de identidade). O
 # Gateway não fala com o Keycloak Admin API para provisionamento de
 # identidade; delega inteiramente ao ETL, que já tem essa lógica.
-ETL_URL = os.getenv("ETL_URL", "http://identidade-etl:8000")
+# Inclui o prefixo "/identidade-etl" — é parte do roteamento do
+# próprio ETL (config/urls.py:_PREFIXO), não um path de proxy externo.
+ETL_URL = os.getenv("ETL_URL", "http://identidade-etl:8000/identidade-etl")
 ETL_TIMEOUT = float(os.getenv("ETL_TIMEOUT", "30"))
 
 # API Key própria para a chamada de serviço Gateway → ETL — distinta

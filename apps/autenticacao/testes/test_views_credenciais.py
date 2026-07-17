@@ -69,7 +69,7 @@ class TestGestaoCredencialEndpoints:
     def test_alterar_senha_com_sucesso(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve confirmar a alteração de senha temporária."""
+        """Deve confirmar a alteração de senha."""
         response = APIClient().post(
             reverse("alterar-senha"),
             data={"login": "1234567", "senha": "novaSenha123"},
@@ -79,7 +79,7 @@ class TestGestaoCredencialEndpoints:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["situacao"] == "senha_alterada"
-        mock_keycloak_admin.redefinir_senha_temporaria.assert_called_once_with(
+        mock_keycloak_admin.redefinir_senha.assert_called_once_with(
             "1234567", "novaSenha123"
         )
 
@@ -88,8 +88,8 @@ class TestGestaoCredencialEndpoints:
         self, mock_keycloak_admin: MagicMock
     ) -> None:
         """Deve retornar 404 quando o login não existir no Keycloak."""
-        mock_keycloak_admin.redefinir_senha_temporaria.side_effect = (
-            KeycloakGetError(error_message="não encontrado")
+        mock_keycloak_admin.redefinir_senha.side_effect = KeycloakGetError(
+            error_message="não encontrado"
         )
 
         response = APIClient().post(
@@ -105,7 +105,12 @@ class TestGestaoCredencialEndpoints:
     def test_alterar_email_com_sucesso(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve confirmar a alteração de e-mail."""
+        """Deve confirmar a alteração de e-mail e a verificação enviada."""
+        mock_keycloak_admin.alterar_email.return_value = {
+            "email_alterado": True,
+            "verificacao_enviada": True,
+        }
+
         response = APIClient().post(
             reverse("alterar-email"),
             data={"login": "1234567", "email": "novo@sme.sp.gov.br"},
@@ -115,9 +120,35 @@ class TestGestaoCredencialEndpoints:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["situacao"] == "email_alterado"
+        assert response.json()["verificacao_enviada"] is True
         mock_keycloak_admin.alterar_email.assert_called_once_with(
             "1234567", "novo@sme.sp.gov.br"
         )
+
+    @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
+    def test_alterar_email_com_verificacao_falhando_retorna_200(
+        self, mock_keycloak_admin: MagicMock
+    ) -> None:
+        """Deve retornar 200 mesmo se o envio da verificação falhar.
+
+        O e-mail já foi alterado (update_user aplicado) — não é um
+        502 genérico, é uma confirmação parcial explícita no corpo.
+        """
+        mock_keycloak_admin.alterar_email.return_value = {
+            "email_alterado": True,
+            "verificacao_enviada": False,
+        }
+
+        response = APIClient().post(
+            reverse("alterar-email"),
+            data={"login": "1234567", "email": "novo@sme.sp.gov.br"},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["situacao"] == "email_alterado"
+        assert response.json()["verificacao_enviada"] is False
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_alterar_email_usuario_inexistente_retorna_404(

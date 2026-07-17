@@ -106,7 +106,7 @@ token-ms não exija mudança de assinatura.
 | Método | Endpoint | Descrição |
 |---|---|---|
 | `POST` | `/recuperar-senha/` | Dispara e-mail nativo de redefinição de senha |
-| `POST` | `/alterar-senha/` | Define senha temporária (exige troca no próximo login) |
+| `POST` | `/alterar-senha/` | Define senha definitiva (não exige troca no próximo login) |
 | `POST` | `/alterar-email/` | Atualiza e-mail e reabre a verificação |
 
 Diferente das rotas de login, estas **já operam contra o Keycloak de
@@ -123,7 +123,7 @@ assinado, expiração, envio de e-mail) é do próprio Keycloak.
 
 ```json
 // POST /alterar-senha/
-{"login": "1234567", "senha": "novaSenhaTemporaria"}
+{"login": "1234567", "senha": "novaSenha"}
 ```
 
 ```json
@@ -131,20 +131,33 @@ assinado, expiração, envio de e-mail) é do próprio Keycloak.
 {"login": "1234567", "email": "novo@sme.prefeitura.sp.gov.br"}
 ```
 
-**Retorno de sucesso (as três rotas):**
+**Retorno de sucesso (`recuperar-senha/` e `alterar-senha/`):**
 
 ```json
 {"situacao": "solicitacao_enviada"}
 ```
 
-Se o `login` não existir no Keycloak, todas retornam `404`.
+**Retorno de sucesso (`alterar-email/`):**
+
+```json
+{"situacao": "email_alterado", "verificacao_enviada": true}
+```
+
+`update_user` (troca do e-mail) e `send_verify_email` (envio da notificação) não
+são atômicos no Keycloak. Se a troca for aplicada mas o envio da verificação
+falhar (ex.: instabilidade do servidor), a resposta continua `200` — o e-mail
+já mudou de fato — com `verificacao_enviada: false` no corpo, em vez de um
+erro genérico que sugeriria que nada foi aplicado. Repita a chamada com o
+mesmo e-mail para reenviar a verificação.
+
+Se o `login` não existir no Keycloak, todas as rotas retornam `404`.
 
 ### Funções em `keycloak_admin.py`
 
 | Função | Ação no Keycloak |
 |---|---|
 | `disparar_redefinicao_senha(login)` | `send_update_account(payload=["UPDATE_PASSWORD"])` |
-| `redefinir_senha_temporaria(login, senha)` | `set_user_password(temporary=True)` |
+| `redefinir_senha(login, senha)` | `set_user_password(temporary=False)` |
 | `alterar_email(login, novo_email)` | `update_user(payload={"email": ...})` + `send_verify_email` |
 | `disparar_verificacao_email(login)` | `send_verify_email` |
 

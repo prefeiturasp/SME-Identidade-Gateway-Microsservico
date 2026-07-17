@@ -20,6 +20,17 @@ def _access_token_fake(claims: dict) -> str:
     return f"{header.decode()}.{payload.decode()}.assinatura-fake"
 
 
+_CONTA_KC = {
+    "id": "5c29cc47-41a1-4ef4-994f-c65aae52d456",
+    "username": "1234567",
+    "email": "fulano@sme.sp.gov.br",
+    "firstName": "FULANO",
+    "lastName": "DE TAL",
+    "enabled": True,
+    "attributes": {"rf": ["1234567"], "cpf": ["12345678900"]},
+}
+
+
 class TestDispararRedefinicaoSenha:
     """Testes de disparar_redefinicao_senha."""
 
@@ -29,16 +40,33 @@ class TestDispararRedefinicaoSenha:
     ) -> None:
         """Deve chamar send_update_account com UPDATE_PASSWORD."""
         admin = MagicMock()
-        admin.get_user_id.return_value = "uuid-usuario"
+        admin.get_users.return_value = [_CONTA_KC]
         mock_obter_admin.return_value = admin
 
         keycloak_admin.disparar_redefinicao_senha("1234567")
 
-        admin.get_user_id.assert_called_once_with("1234567")
         admin.send_update_account.assert_called_once()
         _, kwargs = admin.send_update_account.call_args
-        assert kwargs["user_id"] == "uuid-usuario"
+        assert kwargs["user_id"] == _CONTA_KC["id"]
         assert kwargs["payload"] == ["UPDATE_PASSWORD"]
+
+    @patch("apps.autenticacao.keycloak_admin.obter_admin_keycloak")
+    def test_usuario_nao_encontrado_lanca_keycloak_get_error(
+        self, mock_obter_admin: MagicMock
+    ) -> None:
+        """Deve lançar KeycloakGetError sem chamar o Keycloak."""
+        from keycloak.exceptions import KeycloakGetError
+
+        admin = MagicMock()
+        admin.get_users.return_value = []
+        mock_obter_admin.return_value = admin
+
+        try:
+            keycloak_admin.disparar_redefinicao_senha("0000000")
+            raise AssertionError("deveria ter lançado KeycloakGetError")
+        except KeycloakGetError:
+            pass
+        admin.send_update_account.assert_not_called()
 
 
 class TestDispararVerificacaoEmail:
@@ -50,14 +78,14 @@ class TestDispararVerificacaoEmail:
     ) -> None:
         """Deve chamar send_verify_email para o usuário resolvido."""
         admin = MagicMock()
-        admin.get_user_id.return_value = "uuid-usuario"
+        admin.get_users.return_value = [_CONTA_KC]
         mock_obter_admin.return_value = admin
 
         keycloak_admin.disparar_verificacao_email("1234567")
 
         admin.send_verify_email.assert_called_once()
         _, kwargs = admin.send_verify_email.call_args
-        assert kwargs["user_id"] == "uuid-usuario"
+        assert kwargs["user_id"] == _CONTA_KC["id"]
 
 
 class TestAlterarEmail:
@@ -69,48 +97,69 @@ class TestAlterarEmail:
     ) -> None:
         """Deve atualizar o e-mail e disparar nova verificação."""
         admin = MagicMock()
-        admin.get_user_id.return_value = "uuid-usuario"
+        admin.get_users.return_value = [_CONTA_KC]
         mock_obter_admin.return_value = admin
 
-        keycloak_admin.alterar_email("1234567", "novo@sme.sp.gov.br")
+        resultado = keycloak_admin.alterar_email(
+            "1234567", "novo@sme.sp.gov.br"
+        )
 
         admin.update_user.assert_called_once_with(
-            user_id="uuid-usuario",
+            user_id=_CONTA_KC["id"],
             payload={"email": "novo@sme.sp.gov.br"},
         )
         admin.send_verify_email.assert_called_once()
-
-
-class TestRedefinirSenhaTemporaria:
-    """Testes de redefinir_senha_temporaria."""
+        assert resultado == {
+            "email_alterado": True,
+            "verificacao_enviada": True,
+        }
 
     @patch("apps.autenticacao.keycloak_admin.obter_admin_keycloak")
-    def test_deve_definir_senha_como_temporaria(
+    def test_email_alterado_mesmo_se_verificacao_falhar(
         self, mock_obter_admin: MagicMock
     ) -> None:
-        """Deve chamar set_user_password com temporary=True."""
+        """Não deve propagar falha de send_verify_email.
+
+        update_user e send_verify_email não são atômicos no
+        Keycloak — se a notificação falhar depois da troca já
+        aplicada, quem chama precisa saber que o e-mail mudou mesmo
+        assim, em vez de receber uma exceção genérica.
+        """
         admin = MagicMock()
-        admin.get_user_id.return_value = "uuid-usuario"
+        admin.get_users.return_value = [_CONTA_KC]
+        admin.send_verify_email.side_effect = Exception("instabilidade")
         mock_obter_admin.return_value = admin
 
-        keycloak_admin.redefinir_senha_temporaria("1234567", "senha123")
-
-        admin.set_user_password.assert_called_once_with(
-            user_id="uuid-usuario",
-            password="senha123",  # NOSONAR
-            temporary=True,
+        resultado = keycloak_admin.alterar_email(
+            "1234567", "novo@sme.sp.gov.br"
         )
 
+        admin.update_user.assert_called_once()
+        assert resultado == {
+            "email_alterado": True,
+            "verificacao_enviada": False,
+        }
 
-_CONTA_KC = {
-    "id": "5c29cc47-41a1-4ef4-994f-c65aae52d456",
-    "username": "1234567",
-    "email": "fulano@sme.sp.gov.br",
-    "firstName": "FULANO",
-    "lastName": "DE TAL",
-    "enabled": True,
-    "attributes": {"rf": ["1234567"], "cpf": ["12345678900"]},
-}
+
+class TestRedefinirSenha:
+    """Testes de redefinir_senha."""
+
+    @patch("apps.autenticacao.keycloak_admin.obter_admin_keycloak")
+    def test_deve_definir_senha_como_definitiva(
+        self, mock_obter_admin: MagicMock
+    ) -> None:
+        """Deve chamar set_user_password com temporary=False."""
+        admin = MagicMock()
+        admin.get_users.return_value = [_CONTA_KC]
+        mock_obter_admin.return_value = admin
+
+        keycloak_admin.redefinir_senha("1234567", "senha123")
+
+        admin.set_user_password.assert_called_once_with(
+            user_id=_CONTA_KC["id"],
+            password="senha123",  # NOSONAR
+            temporary=False,
+        )
 
 
 class TestDecodificarClaimsToken:

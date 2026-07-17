@@ -77,7 +77,7 @@ class TestGestaoUsuarioEndpoints:
         cliente = mock_cliente_etl.return_value.__enter__.return_value
         cliente.post.assert_called_once()
         args, kwargs = cliente.post.call_args
-        assert args[0] == "/identidade-etl/api/v1/etl/usuario/criar/"
+        assert args[0] == "/api/v1/etl/usuario/criar/"
         assert kwargs["json"]["nome"] == "Fulano"
 
     def test_criar_usuario_com_sistema_e_roles_repassa_ao_etl(self) -> None:
@@ -351,3 +351,28 @@ class TestGestaoUsuarioEndpoints:
             )
 
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
+
+    def test_consultar_identidade_com_resposta_nao_json_retorna_502(
+        self,
+    ) -> None:
+        """Deve retornar 502 se um proxy responder HTML em vez de JSON.
+
+        Reproduz o cenário observado em QA: sem filtros na
+        querystring, um proxy/WAF na frente do ETL responde com uma
+        página de erro HTML (404 de infraestrutura), não com o JSON
+        que o ETL normalmente devolve.
+        """
+        resposta_etl = httpx.Response(
+            404,
+            content=b"<html><body>Pagina nao encontrada</body></html>",
+            headers={"content-type": "text/html"},
+            request=httpx.Request("GET", "http://etl/identidades/consultar/"),
+        )
+        with patch(_CLIENTE_ETL, return_value=_mock_cliente(resposta_etl)):
+            response = APIClient().get(
+                reverse("usuario-consultar"),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+        assert response.json()["status_etl"] == 404
