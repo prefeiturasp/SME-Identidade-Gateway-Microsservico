@@ -16,3 +16,33 @@ Core
 
 .. automodule:: apps.core.api.urls
    :members:
+
+Autenticação
+------------
+
+.. automodule:: apps.autenticacao.api_key
+   :members:
+
+.. automodule:: apps.autenticacao.keycloak_admin
+   :members:
+
+.. automodule:: apps.autenticacao.api.views
+   :members:
+
+.. automodule:: apps.autenticacao.api.views_credenciais
+   :members:
+
+.. automodule:: apps.autenticacao.api.serializers
+   :members:
+
+Gestão de Usuário
+------------------
+
+.. automodule:: apps.gestao_usuario.cliente_etl
+   :members:
+
+.. automodule:: apps.gestao_usuario.api.views
+   :members:
+
+.. automodule:: apps.gestao_usuario.api.serializers
+   :members:
