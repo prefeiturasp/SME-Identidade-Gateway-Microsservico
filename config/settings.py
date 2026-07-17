@@ -96,7 +96,6 @@ KEYCLOAK_URL_SERVIDOR = os.getenv(
     "KEYCLOAK_URL_SERVIDOR", "https://localhost:8080/"
 )
 KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "COTIC")
-KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "identidade-gateway")
 KEYCLOAK_USUARIO_ADMIN = os.getenv("KEYCLOAK_USUARIO_ADMIN", "admin")
 KEYCLOAK_SENHA_ADMIN = os.getenv("KEYCLOAK_SENHA_ADMIN", "admin")
 KEYCLOAK_VERIFICAR_SSL = (
@@ -104,11 +103,15 @@ KEYCLOAK_VERIFICAR_SSL = (
 )
 
 # Client OIDC usado para autenticar usuário final via grant type
-# password (LoginView) — precisa ter "Direct Access Grants" habilitado
-# no Keycloak. Distinto de KEYCLOAK_CLIENT_ID (usado só em required
-# actions da Admin API). auto-servico-qa é o client com os protocol
-# mappers de realm_access/resource_access (roles) configurados —
-# confidencial, exige client_secret.
+# password (LoginView) e como client_id nas required actions de
+# credencial (send_update_account/send_verify_email) — precisa ter
+# "Direct Access Grants" habilitado e existir de fato no realm.
+# auto-servico-qa é o client com os protocol mappers de
+# realm_access/resource_access (roles) configurados — confidencial,
+# exige client_secret. Um client dedicado "identidade-gateway" chegou
+# a ser cogitado para as required actions, mas não existe no realm
+# COTIC de QA (KeycloakPutError: "Client doesn't exist") — reusar o
+# client de login evita depender de um cadastro extra no Keycloak.
 KEYCLOAK_LOGIN_CLIENT_ID = os.getenv(
     "KEYCLOAK_LOGIN_CLIENT_ID", "auto-servico-qa"
 )

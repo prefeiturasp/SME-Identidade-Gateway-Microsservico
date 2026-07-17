@@ -42,6 +42,33 @@ def obter_admin_keycloak() -> Any:
     )
 
 
+def _resolver_user_id(admin: Any, login: str) -> str:
+    """Resolve o ``user_id`` do Keycloak a partir do login informado.
+
+    Usa ``buscar_usuario_por_login`` (RF/CPF/e-mail/username) em vez
+    de ``admin.get_user_id`` (só busca por username exato e retorna
+    ``None``, sem lançar exceção, quando não encontra — o que faria
+    as rotas de credencial chamarem o Keycloak com ``user_id=None``
+    em vez de responder 404).
+
+    Args:
+        admin: Cliente KeycloakAdmin autenticado.
+        login: RF, CPF, e-mail ou username do usuário.
+
+    Returns:
+        O ``id`` do usuário no Keycloak.
+
+    Raises:
+        KeycloakGetError: Se o usuário não existir no realm.
+    """
+    from keycloak.exceptions import KeycloakGetError
+
+    conta = buscar_usuario_por_login(admin, login)
+    if not conta:
+        raise KeycloakGetError(ERRO_USUARIO_NAO_ENCONTRADO)
+    return str(conta["id"])
+
+
 def disparar_redefinicao_senha(login: str) -> None:
     """Dispara o e-mail nativo do Keycloak para redefinição de senha.
 
@@ -57,11 +84,11 @@ def disparar_redefinicao_senha(login: str) -> None:
         KeycloakGetError: Se o usuário não existir no realm.
     """
     admin = obter_admin_keycloak()
-    user_id = admin.get_user_id(login)
+    user_id = _resolver_user_id(admin, login)
     admin.send_update_account(
         user_id=user_id,
         payload=["UPDATE_PASSWORD"],
-        client_id=settings.KEYCLOAK_CLIENT_ID,
+        client_id=settings.KEYCLOAK_LOGIN_CLIENT_ID,
     )
 
 
@@ -78,55 +105,77 @@ def disparar_verificacao_email(login: str) -> None:
         KeycloakGetError: Se o usuário não existir no realm.
     """
     admin = obter_admin_keycloak()
-    user_id = admin.get_user_id(login)
+    user_id = _resolver_user_id(admin, login)
     admin.send_verify_email(
         user_id=user_id,
-        client_id=settings.KEYCLOAK_CLIENT_ID,
+        client_id=settings.KEYCLOAK_LOGIN_CLIENT_ID,
     )
 
 
-def alterar_email(login: str, novo_email: str) -> None:
+def alterar_email(login: str, novo_email: str) -> dict[str, Any]:
     """Atualiza o e-mail do usuário e reabre a verificação.
 
     O Keycloak marca o novo e-mail como não verificado
     automaticamente ao atualizar o atributo; disparamos o envio do
-    e-mail de verificação em seguida.
+    e-mail de verificação em seguida. As duas operações não são
+    atômicas no Keycloak — se ``send_verify_email`` falhar depois de
+    ``update_user`` já ter sido aplicado (ex.: instabilidade do
+    servidor), o e-mail já mudou de fato. Por isso a falha na
+    verificação é capturada separadamente em vez de propagar: quem
+    chama precisa saber que a troca ocorreu mesmo que a notificação
+    não tenha saído, em vez de receber um erro genérico que sugere
+    que nada foi aplicado.
 
     Args:
         login: RF, CPF ou username do usuário no Keycloak.
         novo_email: Novo endereço de e-mail a ser associado.
 
+    Returns:
+        Dict com ``email_alterado`` (sempre ``True`` se não lançar) e
+        ``verificacao_enviada`` (``False`` se ``send_verify_email``
+        falhar após o e-mail já ter sido trocado).
+
     Raises:
         KeycloakGetError: Se o usuário não existir no realm.
+        KeycloakError: Se a própria troca de e-mail (``update_user``)
+            falhar — nesse caso nada foi aplicado.
     """
     admin = obter_admin_keycloak()
-    user_id = admin.get_user_id(login)
+    user_id = _resolver_user_id(admin, login)
     admin.update_user(user_id=user_id, payload={"email": novo_email})
-    admin.send_verify_email(
-        user_id=user_id,
-        client_id=settings.KEYCLOAK_CLIENT_ID,
-    )
+
+    try:
+        admin.send_verify_email(
+            user_id=user_id,
+            client_id=settings.KEYCLOAK_LOGIN_CLIENT_ID,
+        )
+    except Exception:
+        return {"email_alterado": True, "verificacao_enviada": False}
+
+    return {"email_alterado": True, "verificacao_enviada": True}
 
 
-def redefinir_senha_temporaria(login: str, nova_senha: str) -> None:
-    """Define uma senha temporária, exigindo troca no próximo login.
+def redefinir_senha(login: str, nova_senha: str) -> None:
+    """Define uma nova senha definitiva para o usuário.
 
     Reset administrativo direto (ex.: suporte redefinindo a senha de
-    um usuário). ``temporary=True`` força o Keycloak a exigir troca
-    de senha no próximo login — a senha nunca fica definitiva sem
-    ação do próprio usuário.
+    um usuário). ``temporary=False`` define a senha como definitiva —
+    diferente de ``UPDATE_PASSWORD`` via required action (usada em
+    ``disparar_redefinicao_senha``), não força troca no próximo
+    login, pois quem está definindo a senha aqui é uma ação
+    administrativa explícita, não um esquecimento do usuário.
 
     Args:
         login: RF, CPF ou username do usuário no Keycloak.
-        nova_senha: Senha temporária a ser definida.
+        nova_senha: Nova senha a ser definida.
 
     Raises:
         KeycloakGetError: Se o usuário não existir no realm.
     """
     admin = obter_admin_keycloak()
-    user_id = admin.get_user_id(login)
+    user_id = _resolver_user_id(admin, login)
     admin.set_user_password(
-        user_id=user_id, password=nova_senha, temporary=True
+        user_id=user_id, password=nova_senha, temporary=False
     )
 
 

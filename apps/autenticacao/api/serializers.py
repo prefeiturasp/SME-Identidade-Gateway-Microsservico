@@ -126,14 +126,14 @@ class AlterarSenhaRequestSerializer(serializers.Serializer):
     """Solicitação de redefinição administrativa de senha.
 
     Equivale a ``POST /api/AutenticacaoSgp/AlterarSenha``. Define
-    uma senha temporária no Keycloak — o usuário é obrigado a
-    trocá-la no próximo login.
+    uma senha definitiva no Keycloak — não exige troca no próximo
+    login.
     """
 
     login = serializers.CharField(help_text=_AJUDA_LOGIN)
     senha = serializers.CharField(
         write_only=True,
-        help_text="Nova senha temporária (transporte HTTPS).",
+        help_text="Nova senha (transporte HTTPS).",
     )
 
 
@@ -160,3 +160,24 @@ class OperacaoConfirmadaResponseSerializer(serializers.Serializer):
     """
 
     situacao = serializers.CharField(default="solicitacao_enviada")
+
+
+class AlterarEmailResponseSerializer(serializers.Serializer):
+    """Confirmação da alteração de e-mail, com resultado da verificação.
+
+    ``update_user`` (troca do e-mail) e ``send_verify_email`` (envio
+    da notificação) não são atômicos no Keycloak — se a notificação
+    falhar depois do e-mail já ter sido trocado, o cliente precisa
+    saber disso em vez de receber um erro genérico que sugere que
+    nada foi aplicado.
+    """
+
+    situacao = serializers.CharField(default="email_alterado")
+    verificacao_enviada = serializers.BooleanField(
+        help_text=(
+            "False se o e-mail foi alterado mas o envio da"
+            " notificação de verificação falhou — a troca já foi"
+            " aplicada mesmo assim; repita a operação com o mesmo"
+            " e-mail para reenviar a verificação."
+        )
+    )
