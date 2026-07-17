@@ -11,9 +11,11 @@ from apps.autenticacao.api.views import (
 from apps.autenticacao.api.views_credenciais import (
     AlterarEmailView,
     AlterarSenhaView,
-    RecuperarSenhaView,
 )
 
+# RecuperarSenhaView desativada temporariamente: send_update_account
+# está instável no Keycloak de QA (502 recorrente). Reativar bastando
+# devolver a rota "recuperar-senha/" e o import correspondente.
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path(
@@ -30,11 +32,6 @@ urlpatterns = [
         "usuarios/<str:login>/perfis/<str:perfil>/acesso/",
         DadosAcessoView.as_view(),
         name="usuario-dados-acesso",
-    ),
-    path(
-        "recuperar-senha/",
-        RecuperarSenhaView.as_view(),
-        name="recuperar-senha",
     ),
     path(
         "alterar-senha/",

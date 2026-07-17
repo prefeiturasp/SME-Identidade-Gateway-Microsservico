@@ -19,6 +19,13 @@ class TestGestaoCredencialEndpoints:
         settings.API_KEY = "chave-secreta"
         settings.API_KEY_HEADER = "X-API-Key"
 
+    @pytest.mark.skip(
+        reason=(
+            "Rota recuperar-senha/ desativada temporariamente "
+            "(send_update_account instável no Keycloak de QA) — "
+            "reativar junto com a rota em apps/autenticacao/api/urls.py."
+        )
+    )
     def test_recuperar_senha_sem_api_key_retorna_401(self) -> None:
         """Deve rejeitar requisição sem API Key."""
         response = APIClient().post(
@@ -29,6 +36,13 @@ class TestGestaoCredencialEndpoints:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    @pytest.mark.skip(
+        reason=(
+            "Rota recuperar-senha/ desativada temporariamente "
+            "(send_update_account instável no Keycloak de QA) — "
+            "reativar junto com a rota em apps/autenticacao/api/urls.py."
+        )
+    )
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_recuperar_senha_com_sucesso(
         self, mock_keycloak_admin: MagicMock
@@ -47,6 +61,13 @@ class TestGestaoCredencialEndpoints:
             "1234567"
         )
 
+    @pytest.mark.skip(
+        reason=(
+            "Rota recuperar-senha/ desativada temporariamente "
+            "(send_update_account instável no Keycloak de QA) — "
+            "reativar junto com a rota em apps/autenticacao/api/urls.py."
+        )
+    )
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_recuperar_senha_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
