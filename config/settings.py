@@ -118,7 +118,9 @@ KEYCLOAK_LOGIN_CLIENT_SECRET = os.getenv("KEYCLOAK_LOGIN_CLIENT_SECRET", "")
 # sincronização, concessão de acesso e consulta de identidade). O
 # Gateway não fala com o Keycloak Admin API para provisionamento de
 # identidade; delega inteiramente ao ETL, que já tem essa lógica.
-ETL_URL = os.getenv("ETL_URL", "http://identidade-etl:8000")
+# Inclui o prefixo "/identidade-etl" — é parte do roteamento do
+# próprio ETL (config/urls.py:_PREFIXO), não um path de proxy externo.
+ETL_URL = os.getenv("ETL_URL", "http://identidade-etl:8000/identidade-etl")
 ETL_TIMEOUT = float(os.getenv("ETL_TIMEOUT", "30"))
 
 # API Key própria para a chamada de serviço Gateway → ETL — distinta

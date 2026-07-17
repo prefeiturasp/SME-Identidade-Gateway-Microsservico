@@ -27,6 +27,29 @@ from apps.gestao_usuario.cliente_etl import cliente_etl
 _ETL_INDISPONIVEL = {"erro": "etl indisponível"}
 
 
+def _resposta_do_etl(resposta: httpx.Response) -> Response:
+    """Monta a ``Response`` a partir da resposta do ETL.
+
+    O ETL fica atrás de proxies/WAF que podem responder com uma
+    página de erro HTML (ex.: 404 de infraestrutura) em vez do JSON
+    esperado — nesse caso ``resposta.json()`` lançaria
+    ``JSONDecodeError`` sem ser capturado, derrubando a view com 500
+    em vez de repassar um erro tratável ao cliente.
+    """
+    if not resposta.content:
+        return Response(None, status=resposta.status_code)
+    try:
+        return Response(resposta.json(), status=resposta.status_code)
+    except ValueError:
+        return Response(
+            {
+                "erro": "resposta inválida do etl",
+                "status_etl": resposta.status_code,
+            },
+            status=502,
+        )
+
+
 class CriarUsuarioView(APIView):
     """Cria um usuário no Keycloak a partir de dados diretos.
 
@@ -57,7 +80,7 @@ class CriarUsuarioView(APIView):
         try:
             with cliente_etl() as cliente:
                 resposta = cliente.post(
-                    "/identidade-etl/api/v1/etl/usuario/criar/",
+                    "/api/v1/etl/usuario/criar/",
                     json=entrada.validated_data,
                 )
         except httpx.TimeoutException:
@@ -65,10 +88,7 @@ class CriarUsuarioView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return Response(
-            resposta.json() if resposta.content else None,
-            status=resposta.status_code,
-        )
+        return _resposta_do_etl(resposta)
 
 
 class SincronizarUsuarioView(APIView):
@@ -101,7 +121,7 @@ class SincronizarUsuarioView(APIView):
         try:
             with cliente_etl() as cliente:
                 resposta = cliente.post(
-                    "/identidade-etl/api/v1/etl/usuario/sincronizar/",
+                    "/api/v1/etl/usuario/sincronizar/",
                     json=entrada.validated_data,
                 )
         except httpx.TimeoutException:
@@ -109,10 +129,7 @@ class SincronizarUsuarioView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return Response(
-            resposta.json() if resposta.content else None,
-            status=resposta.status_code,
-        )
+        return _resposta_do_etl(resposta)
 
 
 class ConcederAcessoView(APIView):
@@ -146,7 +163,7 @@ class ConcederAcessoView(APIView):
         try:
             with cliente_etl() as cliente:
                 resposta = cliente.post(
-                    "/identidade-etl/api/v1/etl/usuario/conceder-acesso/",
+                    "/api/v1/etl/usuario/conceder-acesso/",
                     json=entrada.validated_data,
                 )
         except httpx.TimeoutException:
@@ -154,10 +171,7 @@ class ConcederAcessoView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return Response(
-            resposta.json() if resposta.content else None,
-            status=resposta.status_code,
-        )
+        return _resposta_do_etl(resposta)
 
 
 class ConsultarIdentidadeView(APIView):
@@ -197,7 +211,7 @@ class ConsultarIdentidadeView(APIView):
         try:
             with cliente_etl() as cliente:
                 resposta = cliente.get(
-                    "/identidade-etl/api/v1/etl/identidades/consultar/",
+                    "/api/v1/etl/identidades/consultar/",
                     params=request.GET,
                 )
         except httpx.TimeoutException:
@@ -205,7 +219,4 @@ class ConsultarIdentidadeView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return Response(
-            resposta.json() if resposta.content else None,
-            status=resposta.status_code,
-        )
+        return _resposta_do_etl(resposta)
