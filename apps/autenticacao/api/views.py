@@ -58,8 +58,17 @@ class LoginView(APIView):
             request: Requisição HTTP com ``login`` e ``senha``.
 
         Returns:
-            Identidade autenticada + tokens, ou 401/404 conforme o
-            resultado da autenticação.
+            Identidade autenticada + tokens, ou 401 (senha inválida)
+            /204 (login não encontrado — ver nota abaixo).
+
+        Note:
+            Login não encontrado responde ``204 No Content`` (não
+            ``404``): um nginx/WAF em frente ao Gateway em QA
+            intercepta qualquer resposta ``404`` e a substitui por
+            uma página HTML genérica, mascarando o JSON — mesmo
+            problema já corrigido em ``usuarios/consultar/``. ``204``
+            não tem corpo por definição do protocolo HTTP, então não
+            dá para incluir ``detalhe`` nesse caso.
         """
         entrada = LoginRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -69,12 +78,9 @@ class LoginView(APIView):
             entrada.validated_data["senha"],
         )
         if not resultado["autenticado"]:
-            status_code = (
-                404
-                if resultado.get("erro") == ERRO_USUARIO_NAO_ENCONTRADO
-                else 401
-            )
-            return Response({"detalhe": resultado["erro"]}, status=status_code)
+            if resultado.get("erro") == ERRO_USUARIO_NAO_ENCONTRADO:
+                return Response(status=204)
+            return Response({"detalhe": resultado["erro"]}, status=401)
 
         saida = LoginResponseSerializer(resultado)
         return Response(saida.data)
@@ -100,13 +106,13 @@ class DadosUsuarioView(APIView):
             login: RF, CPF, e-mail ou username do usuário.
 
         Returns:
-            Dados cadastrais do usuário, ou 404 se não encontrado.
+            Dados cadastrais do usuário, ou 204 (sem corpo) se não
+            encontrado — não 404, para não ser mascarado por
+            proxy/WAF (ver nota em ``LoginView.post``).
         """
         dados = keycloak_admin.obter_dados_usuario(login)
         if not dados:
-            return Response(
-                {"detalhe": ERRO_USUARIO_NAO_ENCONTRADO}, status=404
-            )
+            return Response(status=204)
 
         saida = DadosUsuarioResponseSerializer(dados)
         return Response(saida.data)

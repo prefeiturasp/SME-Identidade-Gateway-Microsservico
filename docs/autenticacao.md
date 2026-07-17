@@ -73,8 +73,15 @@ requested client`).
 
 | Situação | Status |
 |---|---|
-| Login não encontrado no Keycloak | `404` |
+| Login não encontrado no Keycloak | `204 No Content` (sem corpo) |
 | Senha incorreta | `401` |
+| Usuário não encontrado (`GET /usuarios/{login}/dados/`) | `204 No Content` (sem corpo) |
+
+Login/usuário não encontrado responde `204`, não `404`: um nginx/WAF em
+frente ao Gateway em QA intercepta qualquer resposta `404` e a substitui por
+uma página HTML genérica, mascarando o JSON. `204` não tem corpo por
+definição do protocolo HTTP — o cliente distingue "não encontrado" (204) de
+"encontrado" (200 com corpo) só pelo status, sem mensagem de detalhe.
 
 ### Funções em `keycloak_admin.py` (login)
 
@@ -150,7 +157,9 @@ já mudou de fato — com `verificacao_enviada: false` no corpo, em vez de um
 erro genérico que sugeriria que nada foi aplicado. Repita a chamada com o
 mesmo e-mail para reenviar a verificação.
 
-Se o `login` não existir no Keycloak, todas as rotas retornam `404`.
+Se o `login` não existir no Keycloak, todas as rotas retornam `204 No
+Content` (sem corpo) — mesmo motivo do login/dados do usuário: evitar a
+interceptação de `404` pelo proxy/WAF de QA.
 
 ### Funções em `keycloak_admin.py`
 
@@ -171,7 +180,6 @@ Se o `login` não existir no Keycloak, todas as rotas retornam `404`.
 | `API_KEY_HEADER` | `X-API-Key` | Header onde a chave é enviada |
 | `KEYCLOAK_URL_SERVIDOR` | `https://localhost:8080/` | URL do Keycloak |
 | `KEYCLOAK_REALM` | `COTIC` | Realm de destino |
-| `KEYCLOAK_CLIENT_ID` | `identidade-gateway` | Client usado nas required actions (Admin API) |
 | `KEYCLOAK_USUARIO_ADMIN` / `KEYCLOAK_SENHA_ADMIN` | `admin` / `admin` | Credenciais do `KeycloakAdmin` |
 | `KEYCLOAK_VERIFICAR_SSL` | `true` | Verificação de certificado TLS |
 | `KEYCLOAK_LOGIN_CLIENT_ID` | `auto-servico-qa` | Client OIDC usado no login (grant `password`) — precisa ter Direct Access Grants habilitado e os protocol mappers de `realm_access`/`resource_access` configurados |
