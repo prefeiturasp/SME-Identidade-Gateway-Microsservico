@@ -58,8 +58,9 @@ class LoginView(APIView):
             request: Requisição HTTP com ``login`` e ``senha``.
 
         Returns:
-            Identidade autenticada + tokens, ou 401/404 conforme o
-            resultado da autenticação.
+            Identidade autenticada + tokens; ``401`` se a senha for
+            inválida; ``204`` (sem corpo) se o login não existir no
+            Keycloak.
         """
         entrada = LoginRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -69,12 +70,9 @@ class LoginView(APIView):
             entrada.validated_data["senha"],
         )
         if not resultado["autenticado"]:
-            status_code = (
-                404
-                if resultado.get("erro") == ERRO_USUARIO_NAO_ENCONTRADO
-                else 401
-            )
-            return Response({"detalhe": resultado["erro"]}, status=status_code)
+            if resultado.get("erro") == ERRO_USUARIO_NAO_ENCONTRADO:
+                return Response(status=204)
+            return Response({"detalhe": resultado["erro"]}, status=401)
 
         saida = LoginResponseSerializer(resultado)
         return Response(saida.data)
@@ -100,13 +98,12 @@ class DadosUsuarioView(APIView):
             login: RF, CPF, e-mail ou username do usuário.
 
         Returns:
-            Dados cadastrais do usuário, ou 404 se não encontrado.
+            Dados cadastrais do usuário, ou 204 (sem corpo) se não
+            encontrado.
         """
         dados = keycloak_admin.obter_dados_usuario(login)
         if not dados:
-            return Response(
-                {"detalhe": ERRO_USUARIO_NAO_ENCONTRADO}, status=404
-            )
+            return Response(status=204)
 
         saida = DadosUsuarioResponseSerializer(dados)
         return Response(saida.data)

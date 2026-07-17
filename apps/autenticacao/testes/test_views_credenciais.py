@@ -48,10 +48,10 @@ class TestGestaoCredencialEndpoints:
         )
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
-    def test_recuperar_senha_usuario_inexistente_retorna_404(
+    def test_recuperar_senha_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve retornar 404 quando o login não existir no Keycloak."""
+        """Deve retornar 204 (não 404) quando o login não existir."""
         mock_keycloak_admin.disparar_redefinicao_senha.side_effect = (
             KeycloakGetError(error_message="não encontrado")
         )
@@ -63,7 +63,8 @@ class TestGestaoCredencialEndpoints:
             HTTP_X_API_KEY="chave-secreta",
         )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not response.content
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_alterar_senha_com_sucesso(
@@ -84,10 +85,10 @@ class TestGestaoCredencialEndpoints:
         )
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
-    def test_alterar_senha_usuario_inexistente_retorna_404(
+    def test_alterar_senha_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve retornar 404 quando o login não existir no Keycloak."""
+        """Deve retornar 204 (não 404) quando o login não existir."""
         mock_keycloak_admin.redefinir_senha.side_effect = KeycloakGetError(
             error_message="não encontrado"
         )
@@ -99,7 +100,8 @@ class TestGestaoCredencialEndpoints:
             HTTP_X_API_KEY="chave-secreta",
         )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not response.content
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_alterar_email_com_sucesso(
@@ -151,10 +153,10 @@ class TestGestaoCredencialEndpoints:
         assert response.json()["verificacao_enviada"] is False
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
-    def test_alterar_email_usuario_inexistente_retorna_404(
+    def test_alterar_email_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve retornar 404 quando o login não existir no Keycloak."""
+        """Deve retornar 204 (não 404) quando o login não existir."""
         mock_keycloak_admin.alterar_email.side_effect = KeycloakGetError(
             error_message="não encontrado"
         )
@@ -166,7 +168,8 @@ class TestGestaoCredencialEndpoints:
             HTTP_X_API_KEY="chave-secreta",
         )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not response.content
 
     def test_alterar_email_com_email_invalido_retorna_400(self) -> None:
         """Deve rejeitar payload com e-mail em formato inválido."""

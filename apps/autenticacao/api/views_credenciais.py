@@ -25,7 +25,6 @@ from apps.autenticacao.api.serializers import (
     RecuperarSenhaRequestSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
-from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
 
 _ERRO_KEYCLOAK = {"erro": "falha ao comunicar com o keycloak"}
 
@@ -52,7 +51,7 @@ class RecuperarSenhaView(APIView):
 
         Returns:
             Confirmação de que a solicitação foi encaminhada ao
-            Keycloak, ou 404 se o login não existir.
+            Keycloak, ou 204 (sem corpo) se o login não existir.
         """
         entrada = RecuperarSenhaRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -62,7 +61,7 @@ class RecuperarSenhaView(APIView):
                 entrada.validated_data["login"]
             )
         except KeycloakGetError:
-            return Response({"erro": ERRO_USUARIO_NAO_ENCONTRADO}, status=404)
+            return Response(status=204)
         except KeycloakError:
             return Response(_ERRO_KEYCLOAK, status=502)
 
@@ -94,7 +93,8 @@ class AlterarSenhaView(APIView):
             request: Requisição HTTP com ``login`` e ``senha``.
 
         Returns:
-            Confirmação da alteração, ou 404 se o login não existir.
+            Confirmação da alteração, ou 204 (sem corpo) se o login
+            não existir.
         """
         entrada = AlterarSenhaRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -105,7 +105,7 @@ class AlterarSenhaView(APIView):
                 entrada.validated_data["senha"],
             )
         except KeycloakGetError:
-            return Response({"erro": ERRO_USUARIO_NAO_ENCONTRADO}, status=404)
+            return Response(status=204)
         except KeycloakError:
             return Response(_ERRO_KEYCLOAK, status=502)
 
@@ -143,7 +143,7 @@ class AlterarEmailView(APIView):
 
         Returns:
             Confirmação da alteração com o status do envio da
-            verificação, ou 404 se o login não existir.
+            verificação, ou 204 (sem corpo) se o login não existir.
         """
         entrada = AlterarEmailRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -154,7 +154,7 @@ class AlterarEmailView(APIView):
                 entrada.validated_data["email"],
             )
         except KeycloakGetError:
-            return Response({"erro": ERRO_USUARIO_NAO_ENCONTRADO}, status=404)
+            return Response(status=204)
         except KeycloakError:
             return Response(_ERRO_KEYCLOAK, status=502)
 

@@ -98,8 +98,11 @@ class TestAutenticacaoEndpoints:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_login_usuario_nao_encontrado_retorna_404(self) -> None:
-        """Deve retornar 404 quando o login não existir no Keycloak."""
+    def test_login_usuario_nao_encontrado_retorna_204(self) -> None:
+        """Deve retornar 204 (não 404) quando o login não existir.
+
+        204 não tem corpo por definição do protocolo HTTP.
+        """
         with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
             mock_keycloak_admin.autenticar.return_value = {
                 "autenticado": False,
@@ -112,7 +115,8 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not response.content
 
     def test_dados_usuario_retorna_dados_reais(self) -> None:
         """Deve retornar os dados cadastrais consultados no Keycloak."""
@@ -138,8 +142,8 @@ class TestAutenticacaoEndpoints:
             "1234567"
         )
 
-    def test_dados_usuario_nao_encontrado_retorna_404(self) -> None:
-        """Deve retornar 404 quando o usuário não existir no Keycloak."""
+    def test_dados_usuario_nao_encontrado_retorna_204(self) -> None:
+        """Deve retornar 204 (não 404) quando o usuário não existir."""
         with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
             mock_keycloak_admin.obter_dados_usuario.return_value = None
             response = APIClient().get(
@@ -147,7 +151,8 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not response.content
 
     def test_perfis_por_login_retorna_mock(self) -> None:
         """Deve retornar perfis mockados vinculados ao login."""
