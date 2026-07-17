@@ -110,9 +110,14 @@ token-ms não exija mudança de assinatura.
 
 | Método | Endpoint | Descrição |
 |---|---|---|
-| `POST` | `/recuperar-senha/` | Dispara e-mail nativo de redefinição de senha |
 | `POST` | `/alterar-senha/` | Define senha definitiva (não exige troca no próximo login) |
 | `POST` | `/alterar-email/` | Atualiza e-mail e reabre a verificação |
+
+> `POST /recuperar-senha/` está **desativada temporariamente** (rota removida
+> de `apps/autenticacao/api/urls.py` e do Swagger) — `send_update_account`
+> está instável no Keycloak de QA, retornando `502` de forma recorrente. A
+> view e a lógica em `keycloak_admin.disparar_redefinicao_senha` continuam no
+> código; basta devolver a rota para reativar.
 
 Diferente das rotas de login, estas **já operam contra o Keycloak de
 verdade** via `apps/autenticacao/keycloak_admin.py` (`KeycloakAdmin`, lib
