@@ -51,13 +51,7 @@ class TestGestaoCredencialEndpoints:
     def test_recuperar_senha_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve retornar 204 (não 404) quando o login não existir.
-
-        Um nginx/WAF em frente ao Gateway em QA intercepta qualquer
-        resposta 404 e a substitui por uma página HTML genérica,
-        mascarando o JSON — mesmo problema já corrigido em
-        usuarios/consultar/.
-        """
+        """Deve retornar 204 (não 404) quando o login não existir."""
         mock_keycloak_admin.disparar_redefinicao_senha.side_effect = (
             KeycloakGetError(error_message="não encontrado")
         )
@@ -94,13 +88,7 @@ class TestGestaoCredencialEndpoints:
     def test_alterar_senha_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve retornar 204 (não 404) quando o login não existir.
-
-        Um nginx/WAF em frente ao Gateway em QA intercepta qualquer
-        resposta 404 e a substitui por uma página HTML genérica,
-        mascarando o JSON — mesmo problema já corrigido em
-        usuarios/consultar/.
-        """
+        """Deve retornar 204 (não 404) quando o login não existir."""
         mock_keycloak_admin.redefinir_senha.side_effect = KeycloakGetError(
             error_message="não encontrado"
         )
@@ -168,13 +156,7 @@ class TestGestaoCredencialEndpoints:
     def test_alterar_email_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
-        """Deve retornar 204 (não 404) quando o login não existir.
-
-        Um nginx/WAF em frente ao Gateway em QA intercepta qualquer
-        resposta 404 e a substitui por uma página HTML genérica,
-        mascarando o JSON — mesmo problema já corrigido em
-        usuarios/consultar/.
-        """
+        """Deve retornar 204 (não 404) quando o login não existir."""
         mock_keycloak_admin.alterar_email.side_effect = KeycloakGetError(
             error_message="não encontrado"
         )

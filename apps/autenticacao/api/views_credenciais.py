@@ -51,9 +51,7 @@ class RecuperarSenhaView(APIView):
 
         Returns:
             Confirmação de que a solicitação foi encaminhada ao
-            Keycloak, ou 204 (sem corpo) se o login não existir —
-            não 404, para não ser mascarado por proxy/WAF (mesmo
-            problema já corrigido em ``usuarios/consultar/``).
+            Keycloak, ou 204 (sem corpo) se o login não existir.
         """
         entrada = RecuperarSenhaRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -96,9 +94,7 @@ class AlterarSenhaView(APIView):
 
         Returns:
             Confirmação da alteração, ou 204 (sem corpo) se o login
-            não existir — não 404, para não ser mascarado por
-            proxy/WAF (mesmo problema já corrigido em
-            ``usuarios/consultar/``).
+            não existir.
         """
         entrada = AlterarSenhaRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -147,9 +143,7 @@ class AlterarEmailView(APIView):
 
         Returns:
             Confirmação da alteração com o status do envio da
-            verificação, ou 204 (sem corpo) se o login não existir —
-            não 404, para não ser mascarado por proxy/WAF (mesmo
-            problema já corrigido em ``usuarios/consultar/``).
+            verificação, ou 204 (sem corpo) se o login não existir.
         """
         entrada = AlterarEmailRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)

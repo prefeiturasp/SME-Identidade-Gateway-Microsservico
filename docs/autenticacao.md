@@ -77,11 +77,9 @@ requested client`).
 | Senha incorreta | `401` |
 | Usuário não encontrado (`GET /usuarios/{login}/dados/`) | `204 No Content` (sem corpo) |
 
-Login/usuário não encontrado responde `204`, não `404`: um nginx/WAF em
-frente ao Gateway em QA intercepta qualquer resposta `404` e a substitui por
-uma página HTML genérica, mascarando o JSON. `204` não tem corpo por
-definição do protocolo HTTP — o cliente distingue "não encontrado" (204) de
-"encontrado" (200 com corpo) só pelo status, sem mensagem de detalhe.
+`204` não tem corpo por definição do protocolo HTTP — o cliente distingue
+"não encontrado" (204) de "encontrado" (200 com corpo) só pelo status, sem
+mensagem de detalhe.
 
 ### Funções em `keycloak_admin.py` (login)
 
@@ -158,8 +156,7 @@ erro genérico que sugeriria que nada foi aplicado. Repita a chamada com o
 mesmo e-mail para reenviar a verificação.
 
 Se o `login` não existir no Keycloak, todas as rotas retornam `204 No
-Content` (sem corpo) — mesmo motivo do login/dados do usuário: evitar a
-interceptação de `404` pelo proxy/WAF de QA.
+Content` (sem corpo).
 
 ### Funções em `keycloak_admin.py`
 

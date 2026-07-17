@@ -58,17 +58,9 @@ class LoginView(APIView):
             request: Requisição HTTP com ``login`` e ``senha``.
 
         Returns:
-            Identidade autenticada + tokens, ou 401 (senha inválida)
-            /204 (login não encontrado — ver nota abaixo).
-
-        Note:
-            Login não encontrado responde ``204 No Content`` (não
-            ``404``): um nginx/WAF em frente ao Gateway em QA
-            intercepta qualquer resposta ``404`` e a substitui por
-            uma página HTML genérica, mascarando o JSON — mesmo
-            problema já corrigido em ``usuarios/consultar/``. ``204``
-            não tem corpo por definição do protocolo HTTP, então não
-            dá para incluir ``detalhe`` nesse caso.
+            Identidade autenticada + tokens; ``401`` se a senha for
+            inválida; ``204`` (sem corpo) se o login não existir no
+            Keycloak.
         """
         entrada = LoginRequestSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
@@ -107,8 +99,7 @@ class DadosUsuarioView(APIView):
 
         Returns:
             Dados cadastrais do usuário, ou 204 (sem corpo) se não
-            encontrado — não 404, para não ser mascarado por
-            proxy/WAF (ver nota em ``LoginView.post``).
+            encontrado.
         """
         dados = keycloak_admin.obter_dados_usuario(login)
         if not dados:
