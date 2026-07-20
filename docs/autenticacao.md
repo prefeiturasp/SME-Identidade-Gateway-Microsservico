@@ -22,7 +22,14 @@ username exato, depois os atributos customizados `rf` e `cpf`, e por
 
 `POST /login/` resolve a conta e autentica a senha via
 `KeycloakOpenID.token()` (grant type `password`) — não é mock, é login
-real contra o Keycloak.
+real contra o Keycloak. Numa única resposta, também busca a projeção no
+SME-Identidade-Token-Microsservico e compõe o **token enriquecido** — o
+Gateway é o próprio auth-gateway-ms da arquitetura da plataforma (ver
+`apps.autenticacao.token_enriquecido`), não é necessária uma segunda
+chamada para obter o token. `perfis`/`permissoes` não vêm soltos no
+corpo — já estão embutidos nas claims do `token_enriquecido`; para obtê-
+los sem decodificar o JWT, usar `GET /usuarios/{login}/perfis/` ou
+`GET /usuarios/{login}/perfis/{perfil}/acesso/`.
 
 ```json
 // POST /login/
@@ -50,7 +57,9 @@ real contra o Keycloak.
   },
   "access_token": "eyJhbGci...",
   "refresh_token": "eyJhbGci...",
-  "expires_in": 300
+  "expires_in": 300,
+  "token_enriquecido": "eyJhbGci...",
+  "data_expiracao_token_enriquecido": "2026-07-20T10:14:34-03:00"
 }
 ```
 
@@ -59,6 +68,19 @@ extraído direto dos claims do access token — sem filtragem ou renomeação.
 Depende dos protocol mappers configurados no client de login
 (`KEYCLOAK_LOGIN_CLIENT_ID`); `admin-cli` não os inclui, `auto-servico-qa`
 sim.
+
+`token_enriquecido` **não é** o `access_token` OIDC do Keycloak — é um JWT
+próprio do Gateway, assinado com `JWT_ENRIQUECIDO_SECRET` (HS256), com as
+claims de perfis/permissões já embutidas para o cliente consumir sem
+precisar de outra chamada. Cada sistema integrado ao SME-Identidade
+implementa seu próprio fluxo de login/consumo — o token enriquecido é o
+artefato que carrega o contexto de autorização completo do usuário para
+esse consumo. O Token-MS não emite JWT (só projeta claims); quem monta e
+assina é o próprio Gateway. Ver claims em "Níveis de acesso" abaixo.
+
+Se o usuário não tiver projeção no Token-MS (ou o serviço estiver fora do
+ar), o login **não falha** — `perfis`/`permissoes` vêm vazios e
+`token_enriquecido` é composto só com as claims do Keycloak.
 
 `GET /usuarios/{login}/dados/` retorna o mesmo formato, **sem** `roles` e
 sem os tokens (mesma resolução de `login`, sem autenticar senha). Montar
@@ -91,18 +113,119 @@ mensagem de detalhe.
 
 ---
 
-## Níveis de acesso (mockado)
+## Níveis de acesso (real — Token-MS)
 
 | Método | Endpoint | Descrição |
 |---|---|---|
 | `GET` | `/usuarios/{login}/perfis/` | Perfis de acesso do usuário |
 | `GET` | `/usuarios/{login}/perfis/{perfil}/acesso/` | Token enriquecido + permissões do perfil |
 
-**Estado atual:** as respostas são mockadas — o SME-Identidade-Token-Microsservico,
-que fornecerá os dados reais de perfil e abrangência, ainda está em
-desenvolvimento por outro time. O contrato (paths, payloads) já reflete o
-formato final esperado, para que a troca do mock pela chamada real ao
-token-ms não exija mudança de assinatura.
+Consulta avulsa — útil para recarregar perfis/permissões sem logar de
+novo. `POST /login/` já traz tudo isso numa única resposta (ver seção
+acima); estas rotas não são o único caminho para obter o token
+enriquecido.
+
+Ambas resolvem a conta do usuário no Keycloak (via
+`keycloak_admin.obter_dados_usuario`, mesma normalização usada em
+`GET /usuarios/{login}/dados/`) e consultam a projeção real em
+`GET {TOKEN_MS_URL}/api/v1/perfis/{kc_user_id}/` no
+SME-Identidade-Token-Microsservico, via `apps.core.clientes.token_ms`.
+
+`GET /perfis/{perfil}/acesso/` compõe o token enriquecido com
+`apps.autenticacao.token_enriquecido.compor_token_enriquecido`, incluindo
+a claim `perfilSelecionado` (o `{perfil}` da URL) — diferente do token
+composto no login, que ainda não tem um perfil selecionado.
+
+**Claims do token enriquecido:**
+
+| Claim | Origem |
+|---|---|
+| `sub`, `preferred_username`, `email` | Keycloak |
+| `rf`, `cpf` | Keycloak (sobrescrito pela projeção do Token-MS, se houver) |
+| `nome`, `situacao`, `dre_codigo`, `contrato_externo` | Token-MS (ausentes se não houver projeção) |
+| `perfis`, `permissoes` | Token-MS (listas vazias se não houver projeção) |
+| `perfilSelecionado` | Só em `GET /perfis/{perfil}/acesso/`, ausente no login |
+| `iss` | Sempre `"sme-identidade-gateway"` |
+| `iat`, `exp` | Emissão e expiração (`JWT_ENRIQUECIDO_TTL_SEGUNDOS`) |
+
+**Erros:**
+
+| Situação | Status |
+|---|---|
+| Login não encontrado no Keycloak | `204 No Content` (sem corpo) |
+| Sem projeção para o usuário no Token-MS | `204 No Content` (sem corpo) |
+| Token-MS não responde a tempo | `504` |
+| Token-MS inacessível | `502` |
+
+### Como decodificar o token enriquecido
+
+O `token_enriquecido`/`token` retornado por `POST /login/` e
+`GET /perfis/{perfil}/acesso/` é um JWT assinado com `JWT_ENRIQUECIDO_SECRET`
+(`HS256` por padrão) — **não** é o `access_token` do Keycloak, então não
+valida contra o JWKS do Keycloak. Quem consome precisa da mesma chave
+configurada no Gateway para verificar a assinatura.
+
+**Python (`PyJWT`, mesma lib usada pelo Gateway):**
+
+```python
+import jwt
+
+claims = jwt.decode(
+    token_enriquecido,
+    "<valor de JWT_ENRIQUECIDO_SECRET>",
+    algorithms=["HS256"],  # ou o valor de JWT_ENRIQUECIDO_ALGORITMO
+)
+print(claims["rf"], claims["perfis"], claims["permissoes"])
+```
+
+Sem a chave (ex.: só inspecionar o payload durante desenvolvimento, sem
+verificar a assinatura), usar `jwt.decode(token, options={"verify_signature": False})`
+— **nunca** fazer isso em produção antes de confiar nos dados.
+
+**Node.js (`jsonwebtoken`):**
+
+```js
+const jwt = require("jsonwebtoken");
+
+const claims = jwt.verify(tokenEnriquecido, process.env.JWT_ENRIQUECIDO_SECRET, {
+  algorithms: ["HS256"],
+});
+console.log(claims.rf, claims.perfis, claims.permissoes);
+```
+
+**.NET (`System.IdentityModel.Tokens.Jwt`):**
+
+```csharp
+var handler = new JwtSecurityTokenHandler();
+var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtEnriquecidoSecret));
+var parametros = new TokenValidationParameters
+{
+    ValidateIssuerSigningKey = true,
+    IssuerSigningKey = key,
+    ValidateIssuer = true,
+    ValidIssuer = "sme-identidade-gateway",
+    ValidateAudience = false,
+};
+var principal = handler.ValidateToken(tokenEnriquecido, parametros, out _);
+```
+
+**Linha de comando (inspeção rápida, sem verificar assinatura):**
+
+```bash
+echo "$TOKEN_ENRIQUECIDO" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool
+```
+
+O payload base64 do meio do JWT (segunda parte, entre pontos) decodifica
+para o JSON das claims — útil para conferir o conteúdo em debug local, mas
+não substitui a verificação de assinatura em produção.
+
+**Debug visual:** colar o token em [jwt.io](https://jwt.io) mostra o
+payload decodificado; para verificar a assinatura lá, informar o mesmo
+valor de `JWT_ENRIQUECIDO_SECRET` no campo "Verify Signature" — **evitar
+colar tokens de produção em serviços externos**, usar só em ambiente local
+com secret de desenvolvimento.
+
+Ver a tabela de claims acima para o significado de cada campo do payload.
 
 ---
 
@@ -113,23 +236,12 @@ token-ms não exija mudança de assinatura.
 | `POST` | `/alterar-senha/` | Define senha definitiva (não exige troca no próximo login) |
 | `POST` | `/alterar-email/` | Atualiza e-mail e reabre a verificação |
 
-> `POST /recuperar-senha/` está **desativada temporariamente** (rota removida
-> de `apps/autenticacao/api/urls.py` e do Swagger) — `send_update_account`
-> está instável no Keycloak de QA, retornando `502` de forma recorrente. A
-> view e a lógica em `keycloak_admin.disparar_redefinicao_senha` continuam no
-> código; basta devolver a rota para reativar.
-
 Diferente das rotas de login, estas **já operam contra o Keycloak de
 verdade** via `apps/autenticacao/keycloak_admin.py` (`KeycloakAdmin`, lib
 `python-keycloak` — mesmo padrão de conexão do ETL). Gestão de credencial é
 responsabilidade nativa do Keycloak: nenhum token de recuperação de senha é
 gerado, armazenado ou validado por este serviço — todo o mecanismo (link
 assinado, expiração, envio de e-mail) é do próprio Keycloak.
-
-```json
-// POST /recuperar-senha/
-{"login": "1234567"}
-```
 
 ```json
 // POST /alterar-senha/
@@ -141,7 +253,7 @@ assinado, expiração, envio de e-mail) é do próprio Keycloak.
 {"login": "1234567", "email": "novo@sme.prefeitura.sp.gov.br"}
 ```
 
-**Retorno de sucesso (`recuperar-senha/` e `alterar-senha/`):**
+**Retorno de sucesso (`alterar-senha/`):**
 
 ```json
 {"situacao": "solicitacao_enviada"}
@@ -167,7 +279,6 @@ Content` (sem corpo).
 
 | Função | Ação no Keycloak |
 |---|---|
-| `disparar_redefinicao_senha(login)` | `send_update_account(payload=["UPDATE_PASSWORD"])` |
 | `redefinir_senha(login, senha)` | `set_user_password(temporary=False)` |
 | `alterar_email(login, novo_email)` | `update_user(payload={"email": ...})` + `send_verify_email` |
 | `disparar_verificacao_email(login)` | `send_verify_email` |
@@ -186,6 +297,13 @@ Content` (sem corpo).
 | `KEYCLOAK_VERIFICAR_SSL` | `true` | Verificação de certificado TLS |
 | `KEYCLOAK_LOGIN_CLIENT_ID` | `auto-servico-qa` | Client OIDC usado no login (grant `password`) — precisa ter Direct Access Grants habilitado e os protocol mappers de `realm_access`/`resource_access` configurados |
 | `KEYCLOAK_LOGIN_CLIENT_SECRET` | vazio | Secret do client de login (obrigatório — `auto-servico-qa` é confidencial) |
+| `TOKEN_MS_URL` | `http://token-ms:8000` | URL base do SME-Identidade-Token-Microsservico |
+| `TOKEN_MS_TIMEOUT` | `10` | Timeout (segundos) das chamadas ao Token-MS |
+| `API_KEY_TOKEN_MS` | — | Chave de serviço a serviço Gateway → Token-MS (deve corresponder ao `API_KEY` do Token-MS) |
+| `API_KEY_TOKEN_MS_HEADER` | `X-API-Key` | Header onde a chave do Token-MS é enviada |
+| `JWT_ENRIQUECIDO_SECRET` | — | Chave de assinatura do token enriquecido (HMAC) — gerar um secret dedicado, nunca reaproveitar `DJANGO_SECRET_KEY` |
+| `JWT_ENRIQUECIDO_ALGORITMO` | `HS256` | Algoritmo de assinatura do token enriquecido |
+| `JWT_ENRIQUECIDO_TTL_SEGUNDOS` | `28800` (8h) | Tempo de vida do token enriquecido |
 
 `KEYCLOAK_LOGIN_CLIENT_ID` é distinto de `KEYCLOAK_CLIENT_ID`: o primeiro
 autentica usuário final (login), o segundo é usado só pela Admin API para

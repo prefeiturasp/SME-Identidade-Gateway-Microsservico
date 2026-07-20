@@ -5,9 +5,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.urls import reverse
-from keycloak.exceptions import KeycloakGetError
+from keycloak.exceptions import KeycloakError, KeycloakGetError
 from rest_framework import status
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
+
+from apps.autenticacao.api.views_credenciais import RecuperarSenhaView
+
+# RecuperarSenhaView não tem rota registrada (send_update_account
+# instável no Keycloak de QA — ver apps/autenticacao/api/urls.py), mas
+# a view continua ativa no código, aguardando reativação. Testada aqui
+# via APIRequestFactory + .as_view() direto, sem depender de reverse().
+_factory = APIRequestFactory()
 
 
 class TestGestaoCredencialEndpoints:
@@ -19,55 +27,34 @@ class TestGestaoCredencialEndpoints:
         settings.API_KEY = "chave-secreta"
         settings.API_KEY_HEADER = "X-API-Key"
 
-    @pytest.mark.skip(
-        reason=(
-            "Rota recuperar-senha/ desativada temporariamente "
-            "(send_update_account instável no Keycloak de QA) — "
-            "reativar junto com a rota em apps/autenticacao/api/urls.py."
-        )
-    )
     def test_recuperar_senha_sem_api_key_retorna_401(self) -> None:
         """Deve rejeitar requisição sem API Key."""
-        response = APIClient().post(
-            reverse("recuperar-senha"),
-            data={"login": "1234567"},
-            format="json",
+        request = _factory.post(
+            "/recuperar-senha/", {"login": "1234567"}, format="json"
         )
+        response = RecuperarSenhaView.as_view()(request)
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    @pytest.mark.skip(
-        reason=(
-            "Rota recuperar-senha/ desativada temporariamente "
-            "(send_update_account instável no Keycloak de QA) — "
-            "reativar junto com a rota em apps/autenticacao/api/urls.py."
-        )
-    )
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_recuperar_senha_com_sucesso(
         self, mock_keycloak_admin: MagicMock
     ) -> None:
         """Deve confirmar o disparo da recuperação de senha."""
-        response = APIClient().post(
-            reverse("recuperar-senha"),
-            data={"login": "1234567"},
+        request = _factory.post(
+            "/recuperar-senha/",
+            {"login": "1234567"},
             format="json",
             HTTP_X_API_KEY="chave-secreta",
         )
+        response = RecuperarSenhaView.as_view()(request)
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["situacao"] == "solicitacao_enviada"
+        assert response.data["situacao"] == "solicitacao_enviada"
         mock_keycloak_admin.disparar_redefinicao_senha.assert_called_once_with(
             "1234567"
         )
 
-    @pytest.mark.skip(
-        reason=(
-            "Rota recuperar-senha/ desativada temporariamente "
-            "(send_update_account instável no Keycloak de QA) — "
-            "reativar junto com a rota em apps/autenticacao/api/urls.py."
-        )
-    )
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_recuperar_senha_usuario_inexistente_retorna_204(
         self, mock_keycloak_admin: MagicMock
@@ -77,15 +64,35 @@ class TestGestaoCredencialEndpoints:
             KeycloakGetError(error_message="não encontrado")
         )
 
-        response = APIClient().post(
-            reverse("recuperar-senha"),
-            data={"login": "0000000"},
+        request = _factory.post(
+            "/recuperar-senha/",
+            {"login": "0000000"},
             format="json",
             HTTP_X_API_KEY="chave-secreta",
         )
+        response = RecuperarSenhaView.as_view()(request)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert not response.content
+        assert not response.data
+
+    @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
+    def test_recuperar_senha_com_falha_generica_retorna_502(
+        self, mock_keycloak_admin: MagicMock
+    ) -> None:
+        """Deve retornar 502 quando o Keycloak falhar por outro motivo."""
+        mock_keycloak_admin.disparar_redefinicao_senha.side_effect = (
+            KeycloakError(error_message="indisponível")
+        )
+
+        request = _factory.post(
+            "/recuperar-senha/",
+            {"login": "1234567"},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+        response = RecuperarSenhaView.as_view()(request)
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_alterar_senha_com_sucesso(
@@ -123,6 +130,24 @@ class TestGestaoCredencialEndpoints:
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not response.content
+
+    @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
+    def test_alterar_senha_com_falha_generica_retorna_502(
+        self, mock_keycloak_admin: MagicMock
+    ) -> None:
+        """Deve retornar 502 quando o Keycloak falhar por outro motivo."""
+        mock_keycloak_admin.redefinir_senha.side_effect = KeycloakError(
+            error_message="indisponível"
+        )
+
+        response = APIClient().post(
+            reverse("alterar-senha"),
+            data={"login": "1234567", "senha": "x"},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
     @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
     def test_alterar_email_com_sucesso(
@@ -191,6 +216,24 @@ class TestGestaoCredencialEndpoints:
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not response.content
+
+    @patch("apps.autenticacao.api.views_credenciais.keycloak_admin")
+    def test_alterar_email_com_falha_generica_retorna_502(
+        self, mock_keycloak_admin: MagicMock
+    ) -> None:
+        """Deve retornar 502 quando o Keycloak falhar por outro motivo."""
+        mock_keycloak_admin.alterar_email.side_effect = KeycloakError(
+            error_message="indisponível"
+        )
+
+        response = APIClient().post(
+            reverse("alterar-email"),
+            data={"login": "1234567", "email": "novo@sme.sp.gov.br"},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
     def test_alterar_email_com_email_invalido_retorna_400(self) -> None:
         """Deve rejeitar payload com e-mail em formato inválido."""
