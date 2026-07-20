@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.autenticacao.api_key import AutenticacaoApiKey
+from apps.core.http import resposta_do_servico
 from apps.gestao_usuario.api.serializers import (
     ConcederAcessoSerializer,
     CriarUsuarioSerializer,
@@ -25,29 +26,6 @@ from apps.gestao_usuario.api.serializers import (
 from apps.gestao_usuario.cliente_etl import cliente_etl
 
 _ETL_INDISPONIVEL = {"erro": "etl indisponível"}
-
-
-def _resposta_do_etl(resposta: httpx.Response) -> Response:
-    """Monta a ``Response`` a partir da resposta do ETL.
-
-    O ETL fica atrás de proxies/WAF que podem responder com uma
-    página de erro HTML (ex.: 404 de infraestrutura) em vez do JSON
-    esperado — nesse caso ``resposta.json()`` lançaria
-    ``JSONDecodeError`` sem ser capturado, derrubando a view com 500
-    em vez de repassar um erro tratável ao cliente.
-    """
-    if not resposta.content:
-        return Response(None, status=resposta.status_code)
-    try:
-        return Response(resposta.json(), status=resposta.status_code)
-    except ValueError:
-        return Response(
-            {
-                "erro": "resposta inválida do etl",
-                "status_etl": resposta.status_code,
-            },
-            status=502,
-        )
 
 
 class CriarUsuarioView(APIView):
@@ -88,7 +66,7 @@ class CriarUsuarioView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return _resposta_do_etl(resposta)
+        return resposta_do_servico(resposta)
 
 
 class SincronizarUsuarioView(APIView):
@@ -129,7 +107,7 @@ class SincronizarUsuarioView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return _resposta_do_etl(resposta)
+        return resposta_do_servico(resposta)
 
 
 class ConcederAcessoView(APIView):
@@ -171,7 +149,7 @@ class ConcederAcessoView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return _resposta_do_etl(resposta)
+        return resposta_do_servico(resposta)
 
 
 class ConsultarIdentidadeView(APIView):
@@ -219,4 +197,4 @@ class ConsultarIdentidadeView(APIView):
         except httpx.TransportError:
             return Response(_ETL_INDISPONIVEL, status=502)
 
-        return _resposta_do_etl(resposta)
+        return resposta_do_servico(resposta)

@@ -50,3 +50,27 @@ class TestHealthStatusSerializer(SimpleTestCase):
                 "status": "healthy",
             },
         )
+
+    def test_dependencias_e_opcional(self) -> None:
+        """Não deve exigir o campo dependencias na validação."""
+        serializer = HealthStatusSerializer(data={"status": "healthy"})
+
+        self.assertTrue(serializer.is_valid())
+        self.assertNotIn("dependencias", serializer.validated_data)
+
+    def test_deve_serializar_dependencias_quando_presente(self) -> None:
+        """Deve incluir dependencias na saída quando informado."""
+        serializer = HealthStatusSerializer(
+            instance={
+                "status": "healthy",
+                "dependencias": {"token_ms": "unhealthy"},
+            },
+        )
+
+        self.assertEqual(
+            serializer.data,
+            {
+                "status": "healthy",
+                "dependencias": {"token_ms": "unhealthy"},
+            },
+        )
