@@ -17,6 +17,12 @@ Core
 .. automodule:: apps.core.api.urls
    :members:
 
+.. automodule:: apps.core.clientes.token_ms
+   :members:
+
+.. automodule:: apps.core.http
+   :members:
+
 Autenticação
 ------------
 
@@ -24,6 +30,9 @@ Autenticação
    :members:
 
 .. automodule:: apps.autenticacao.keycloak_admin
+   :members:
+
+.. automodule:: apps.autenticacao.token_enriquecido
    :members:
 
 .. automodule:: apps.autenticacao.api.views

@@ -375,4 +375,4 @@ class TestGestaoUsuarioEndpoints:
             )
 
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
-        assert response.json()["status_etl"] == 404
+        assert response.json()["status_servico"] == 404

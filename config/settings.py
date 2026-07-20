@@ -81,11 +81,16 @@ REST_FRAMEWORK = {
 API_KEY = os.getenv("API_KEY", "")
 API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
 
-# Destino do roteamento — Token-MS ainda em desenvolvimento por
-# outro time; usado quando os mocks do app `autenticacao` forem
-# substituídos por chamadas reais.
+# SME-Identidade-Token-Microsservico — destino do roteamento de
+# perfis/níveis de acesso (apps.autenticacao) e do health check
+# estendido (apps.core.clientes.token_ms).
 TOKEN_MS_URL = os.getenv("TOKEN_MS_URL", "http://token-ms:8000")
 TOKEN_MS_TIMEOUT = float(os.getenv("TOKEN_MS_TIMEOUT", "10"))
+
+# API Key própria para a chamada de serviço Gateway → Token-MS —
+# distinta da API_KEY que os clientes usam para chamar o Gateway.
+API_KEY_TOKEN_MS = os.getenv("API_KEY_TOKEN_MS", "")
+API_KEY_TOKEN_MS_HEADER = os.getenv("API_KEY_TOKEN_MS_HEADER", "X-API-Key")
 
 # Keycloak Admin API — usado nas rotas de gestão de senha/e-mail
 # (recuperação de senha, alteração de senha, alteração de e-mail) e
@@ -100,6 +105,17 @@ KEYCLOAK_USUARIO_ADMIN = os.getenv("KEYCLOAK_USUARIO_ADMIN", "admin")
 KEYCLOAK_SENHA_ADMIN = os.getenv("KEYCLOAK_SENHA_ADMIN", "admin")
 KEYCLOAK_VERIFICAR_SSL = (
     os.getenv("KEYCLOAK_VERIFICAR_SSL", "true").lower() == "true"
+)
+
+# Token enriquecido — JWT próprio do Gateway (auth-gateway-ms), composto
+# a partir das claims do Keycloak + projeção do Token-MS. Assinado com
+# chave própria (HS256), não é o access_token OIDC do Keycloak — usado
+# para compatibilidade com sistemas legados que esperam "um token" da
+# API/EOL. Ver apps.autenticacao.token_enriquecido.
+JWT_ENRIQUECIDO_SECRET = os.getenv("JWT_ENRIQUECIDO_SECRET", "")
+JWT_ENRIQUECIDO_ALGORITMO = os.getenv("JWT_ENRIQUECIDO_ALGORITMO", "HS256")
+JWT_ENRIQUECIDO_TTL_SEGUNDOS = int(
+    os.getenv("JWT_ENRIQUECIDO_TTL_SEGUNDOS", "28800")
 )
 
 # Client OIDC usado para autenticar usuário final via grant type

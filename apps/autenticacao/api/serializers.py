@@ -25,13 +25,51 @@ class LoginRequestSerializer(serializers.Serializer):
     )
 
 
+class PerfilSerializer(serializers.Serializer):
+    """Perfil de acesso vinculado a um usuário em um sistema."""
+
+    id = serializers.UUIDField()
+    nome = serializers.CharField()
+    ativo = serializers.BooleanField()
+
+
+class ModuloPermissaoSerializer(serializers.Serializer):
+    """Permissões CRUD de um módulo concedidas por um perfil de acesso.
+
+    Espelha a estrutura real de origem no CoreSSO
+    (``SYS_GrupoPermissao``/``SYS_Modulo``): a permissão é concedida
+    por sistema e módulo, com quatro ações independentes — não existe
+    um "código de permissão" único no legado.
+    """
+
+    sistema_id = serializers.IntegerField()
+    sistema_nome = serializers.CharField()
+    modulo_id = serializers.IntegerField()
+    modulo_nome = serializers.CharField()
+    consultar = serializers.BooleanField()
+    inserir = serializers.BooleanField()
+    alterar = serializers.BooleanField()
+    excluir = serializers.BooleanField()
+
+
 class LoginResponseSerializer(serializers.Serializer):
-    """Resultado da autenticação de um usuário no Keycloak.
+    """Resultado completo da autenticação de um usuário.
 
     Equivale ao retorno da Etapa 1 do fluxo legado
     (``usuarioId``, ``status``, ``nome``, ``codigoRf``), mas
     autenticado de verdade contra o Keycloak (grant type
-    ``password``, via ``KeycloakOpenID``).
+    ``password``, via ``KeycloakOpenID``) e já enriquecido numa única
+    resposta: além dos tokens OIDC brutos do Keycloak, inclui o
+    ``token_enriquecido`` (composto pelo Gateway a partir das claims
+    do Keycloak + projeção do Token-MS — ver
+    ``apps.autenticacao.token_enriquecido``), sem exigir uma segunda
+    chamada a ``DadosAcessoView``.
+
+    ``perfis``/``permissoes`` não são repetidos soltos aqui — já vêm
+    embutidos nas claims do ``token_enriquecido``; quem precisar
+    desses dados sem decodificar o JWT deve consultar
+    ``GET /usuarios/{login}/perfis/`` ou
+    ``GET /usuarios/{login}/perfis/{perfil}/acesso/``.
     """
 
     kc_user_id = serializers.CharField()
@@ -51,14 +89,15 @@ class LoginResponseSerializer(serializers.Serializer):
     access_token = serializers.CharField()
     refresh_token = serializers.CharField()
     expires_in = serializers.IntegerField(allow_null=True, required=False)
-
-
-class PerfilSerializer(serializers.Serializer):
-    """Perfil de acesso vinculado a um usuário em um sistema."""
-
-    id = serializers.UUIDField()
-    nome = serializers.CharField()
-    ativo = serializers.BooleanField()
+    token_enriquecido = serializers.CharField(
+        help_text=(
+            "JWT próprio do Gateway (auth-gateway-ms), assinado com"
+            " chave própria — não é o access_token OIDC do Keycloak."
+            " Usado para compatibilidade com sistemas legados. Inclui"
+            " perfis/permissoes nas claims — decodificar para lê-los."
+        )
+    )
+    data_expiracao_token_enriquecido = serializers.DateTimeField()
 
 
 class PerfisPorLoginResponseSerializer(serializers.Serializer):
@@ -70,13 +109,6 @@ class PerfisPorLoginResponseSerializer(serializers.Serializer):
 
     rf = serializers.CharField(allow_null=True, required=False)
     perfis = PerfilSerializer(many=True)
-
-
-class PermissaoSerializer(serializers.Serializer):
-    """Permissão individual concedida por um perfil de acesso."""
-
-    codigo = serializers.IntegerField()
-    descricao = serializers.CharField(allow_null=True, required=False)
 
 
 class DadosAcessoResponseSerializer(serializers.Serializer):
@@ -91,7 +123,7 @@ class DadosAcessoResponseSerializer(serializers.Serializer):
 
     token = serializers.CharField()
     data_expiracao_token = serializers.DateTimeField()
-    permissoes = PermissaoSerializer(many=True)
+    permissoes = ModuloPermissaoSerializer(many=True)
 
 
 class DadosUsuarioResponseSerializer(serializers.Serializer):
