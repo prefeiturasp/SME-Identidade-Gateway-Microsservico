@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from apps.core.clientes.token_ms import cliente_token_ms
 
 
@@ -27,4 +29,4 @@ class TestClienteTokenMs:
 
         with cliente_token_ms() as cliente:
             assert str(cliente.base_url) == "http://token-ms-teste:9000"
-            assert cliente.timeout.connect == 7.5
+            assert cliente.timeout.connect == pytest.approx(7.5)

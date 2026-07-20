@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from apps.gestao_usuario.cliente_etl import cliente_etl
 
 
@@ -27,4 +29,4 @@ class TestClienteEtl:
 
         with cliente_etl() as cliente:
             assert str(cliente.base_url) == "http://etl-teste:9000"
-            assert cliente.timeout.connect == 12.5
+            assert cliente.timeout.connect == pytest.approx(12.5)
