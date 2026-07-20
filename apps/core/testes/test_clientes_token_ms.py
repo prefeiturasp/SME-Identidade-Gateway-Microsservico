@@ -24,9 +24,9 @@ class TestClienteTokenMs:
 
     def test_usa_url_base_e_timeout_configurados(self, settings: Any) -> None:
         """Deve usar TOKEN_MS_URL/TOKEN_MS_TIMEOUT do settings."""
-        settings.TOKEN_MS_URL = "http://token-ms-teste:9000"
+        settings.TOKEN_MS_URL = "https://token-ms-teste:9000"
         settings.TOKEN_MS_TIMEOUT = 7.5
 
         with cliente_token_ms() as cliente:
-            assert str(cliente.base_url) == "http://token-ms-teste:9000"
+            assert str(cliente.base_url) == "https://token-ms-teste:9000"
             assert cliente.timeout.connect == pytest.approx(7.5)

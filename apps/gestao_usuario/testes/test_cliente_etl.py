@@ -24,9 +24,9 @@ class TestClienteEtl:
 
     def test_usa_url_base_e_timeout_configurados(self, settings: Any) -> None:
         """Deve usar ETL_URL/ETL_TIMEOUT do settings."""
-        settings.ETL_URL = "http://etl-teste:9000"
+        settings.ETL_URL = "https://etl-teste:9000"
         settings.ETL_TIMEOUT = 12.5
 
         with cliente_etl() as cliente:
-            assert str(cliente.base_url) == "http://etl-teste:9000"
+            assert str(cliente.base_url) == "https://etl-teste:9000"
             assert cliente.timeout.connect == pytest.approx(12.5)
