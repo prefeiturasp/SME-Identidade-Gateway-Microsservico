@@ -4,6 +4,8 @@ import base64
 import json
 from unittest.mock import MagicMock, patch
 
+from django.test import SimpleTestCase, override_settings
+
 from apps.autenticacao import keycloak_admin
 
 
@@ -49,24 +51,6 @@ class TestDispararRedefinicaoSenha:
         _, kwargs = admin.send_update_account.call_args
         assert kwargs["user_id"] == _CONTA_KC["id"]
         assert kwargs["payload"] == ["UPDATE_PASSWORD"]
-
-    @patch("apps.autenticacao.keycloak_admin.obter_admin_keycloak")
-    def test_usuario_nao_encontrado_lanca_keycloak_get_error(
-        self, mock_obter_admin: MagicMock
-    ) -> None:
-        """Deve lançar KeycloakGetError sem chamar o Keycloak."""
-        from keycloak.exceptions import KeycloakGetError
-
-        admin = MagicMock()
-        admin.get_users.return_value = []
-        mock_obter_admin.return_value = admin
-
-        try:
-            keycloak_admin.disparar_redefinicao_senha("0000000")
-            raise AssertionError("deveria ter lançado KeycloakGetError")
-        except KeycloakGetError:
-            pass
-        admin.send_update_account.assert_not_called()
 
 
 class TestDispararVerificacaoEmail:
@@ -354,3 +338,71 @@ class TestObterDadosUsuario:
         resultado = keycloak_admin.obter_dados_usuario("0000000")
 
         assert resultado is None
+
+
+@override_settings(
+    KEYCLOAK_URL_SERVIDOR="https://keycloak.local",
+    KEYCLOAK_USUARIO_ADMIN="admin",
+    KEYCLOAK_SENHA_ADMIN="senha",
+    KEYCLOAK_REALM="master",
+    KEYCLOAK_VERIFICAR_SSL=False,
+)
+class TestObterAdminKeycloak(SimpleTestCase):
+    """Testes de obter_admin_keycloak."""
+
+    @patch("keycloak.KeycloakAdmin")
+    def test_deve_instanciar_keycloak_admin(
+        self,
+        mock_keycloak_admin: MagicMock,
+    ) -> None:
+        """Deve criar o cliente KeycloakAdmin com as configurações."""
+        instancia = MagicMock()
+        mock_keycloak_admin.return_value = instancia
+
+        resultado = keycloak_admin.obter_admin_keycloak()
+
+        assert resultado is instancia
+
+        mock_keycloak_admin.assert_called_once_with(
+            server_url="https://keycloak.local",
+            username="admin",
+            password="senha",
+            realm_name="master",
+            user_realm_name="master",
+            verify=False,
+        )
+
+
+class TestResolverUserId(SimpleTestCase):
+    """Testes de _resolver_user_id."""
+
+    @patch("apps.autenticacao.keycloak_admin.buscar_usuario_por_login")
+    def test_deve_retornar_id_do_usuario(
+        self,
+        mock_buscar: MagicMock,
+    ) -> None:
+        """Deve retornar o id da conta encontrada."""
+        mock_buscar.return_value = {"id": "abc-123"}
+
+        resultado = keycloak_admin._resolver_user_id(
+            MagicMock(),
+            "1234567",
+        )
+
+        assert resultado == "abc-123"
+
+    @patch("apps.autenticacao.keycloak_admin.buscar_usuario_por_login")
+    def test_deve_lancar_keycloak_get_error_quando_nao_encontrar(
+        self,
+        mock_buscar: MagicMock,
+    ) -> None:
+        """Deve lançar KeycloakGetError quando a conta não existir."""
+        from keycloak.exceptions import KeycloakGetError
+
+        mock_buscar.return_value = None
+
+        with self.assertRaises(KeycloakGetError):
+            keycloak_admin._resolver_user_id(
+                MagicMock(),
+                "0000000",
+            )
