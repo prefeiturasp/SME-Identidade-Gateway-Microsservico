@@ -11,7 +11,7 @@ def test_resposta_do_servico_com_corpo_vazio() -> None:
     resposta = httpx.Response(
         status.HTTP_204_NO_CONTENT,
         content=b"",
-        request=httpx.Request("GET", "http://servico/teste"),
+        request=httpx.Request("GET", "https://servico/teste"),
     )
 
     response = resposta_do_servico(resposta)

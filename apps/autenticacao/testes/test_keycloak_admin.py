@@ -366,7 +366,7 @@ class TestObterAdminKeycloak(SimpleTestCase):
         mock_keycloak_admin.assert_called_once_with(
             server_url="https://keycloak.local",
             username="admin",
-            password="senha",
+            password="senha",  # NOSONAR
             realm_name="master",
             user_realm_name="master",
             verify=False,
