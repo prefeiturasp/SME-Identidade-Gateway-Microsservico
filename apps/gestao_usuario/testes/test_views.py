@@ -376,3 +376,60 @@ class TestGestaoUsuarioEndpoints:
 
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
         assert response.json()["status_servico"] == 404
+
+    def test_sincronizar_usuario_com_etl_indisponivel_retorna_502(
+        self,
+    ) -> None:
+        """Deve retornar 502 quando o ETL estiver inacessível."""
+        cliente = MagicMock()
+        cliente.__enter__.return_value = cliente
+        cliente.post.side_effect = httpx.ConnectError("recusado")
+
+        with patch(_CLIENTE_ETL, return_value=cliente):
+            response = APIClient().post(
+                reverse("usuario-sincronizar"),
+                data={"identificador": "1234567"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+
+    def test_conceder_acesso_com_etl_indisponivel_retorna_502(
+        self,
+    ) -> None:
+        """Deve retornar 502 quando o ETL estiver inacessível."""
+        cliente = MagicMock()
+        cliente.__enter__.return_value = cliente
+        cliente.post.side_effect = httpx.ConnectError("recusado")
+
+        with patch(_CLIENTE_ETL, return_value=cliente):
+            response = APIClient().post(
+                reverse("usuario-conceder-acesso"),
+                data={
+                    "identificador": "1234567",
+                    "sistema": 1,
+                    "roles": ["Admin"],
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+
+    def test_consultar_identidade_com_timeout_retorna_504(
+        self,
+    ) -> None:
+        """Deve retornar 504 quando o ETL não responder a tempo."""
+        cliente = MagicMock()
+        cliente.__enter__.return_value = cliente
+        cliente.get.side_effect = httpx.TimeoutException("timeout")
+
+        with patch(_CLIENTE_ETL, return_value=cliente):
+            response = APIClient().get(
+                reverse("usuario-consultar"),
+                {"cpf": "12345678900"},
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT

@@ -22,14 +22,14 @@ username exato, depois os atributos customizados `rf` e `cpf`, e por
 
 `POST /login/` resolve a conta e autentica a senha via
 `KeycloakOpenID.token()` (grant type `password`) — não é mock, é login
-real contra o Keycloak. Numa única resposta, também busca a projeção no
-SME-Identidade-Token-Microsservico e compõe o **token enriquecido** — o
-Gateway é o próprio auth-gateway-ms da arquitetura da plataforma (ver
-`apps.autenticacao.token_enriquecido`), não é necessária uma segunda
-chamada para obter o token. `perfis`/`permissoes` não vêm soltos no
-corpo — já estão embutidos nas claims do `token_enriquecido`; para obtê-
-los sem decodificar o JWT, usar `GET /usuarios/{login}/perfis/` ou
-`GET /usuarios/{login}/perfis/{perfil}/acesso/`.
+real contra o Keycloak. Numa única resposta, também solicita ao
+SME-Identidade-Token-Microsservico a geração do **token enriquecido**,
+não sendo necessária uma segunda chamada para obtê-lo. `perfis` e
+`permissoes` fazem parte das claims do
+`token_enriquecido`; para obtê-los sem decodificar o JWT, usar
+`GET /usuarios/{login}/perfis/` ou
+`GET /usuarios/{login}/perfis/{perfil}/acesso/`, que retorna as
+permissões do perfil juntamente com o token.
 
 ```json
 // POST /login/
@@ -70,17 +70,16 @@ Depende dos protocol mappers configurados no client de login
 sim.
 
 `token_enriquecido` **não é** o `access_token` OIDC do Keycloak — é um JWT
-próprio do Gateway, assinado com `JWT_ENRIQUECIDO_SECRET` (HS256), com as
-claims de perfis/permissões já embutidas para o cliente consumir sem
-precisar de outra chamada. Cada sistema integrado ao SME-Identidade
-implementa seu próprio fluxo de login/consumo — o token enriquecido é o
-artefato que carrega o contexto de autorização completo do usuário para
-esse consumo. O Token-MS não emite JWT (só projeta claims); quem monta e
-assina é o próprio Gateway. Ver claims em "Níveis de acesso" abaixo.
+emitido pelo SME-Identidade-Token-Microsservico, com as claims de
+perfis/permissões já embutidas para o cliente consumir sem precisar de
+outra chamada. O token enriquecido carrega o contexto de autorização do
+usuário e é obtido pelo Gateway junto ao
+SME-Identidade-Token-Microsservico durante o fluxo de autenticação.
 
-Se o usuário não tiver projeção no Token-MS (ou o serviço estiver fora do
-ar), o login **não falha** — `perfis`/`permissoes` vêm vazios e
-`token_enriquecido` é composto só com as claims do Keycloak.
+Se o usuário não tiver projeção no SME-Identidade-Token-Microsservico
+(ou o serviço estiver fora do ar), o login **não falha** —
+`token_enriquecido` e sua data de expiração não são retornados na
+resposta.
 
 `GET /usuarios/{login}/dados/` retorna o mesmo formato, **sem** `roles` e
 sem os tokens (mesma resolução de `login`, sem autenticar senha). Montar
@@ -127,26 +126,20 @@ enriquecido.
 
 Ambas resolvem a conta do usuário no Keycloak (via
 `keycloak_admin.obter_dados_usuario`, mesma normalização usada em
-`GET /usuarios/{login}/dados/`) e consultam a projeção real em
-`GET {TOKEN_MS_URL}/api/v1/perfis/{kc_user_id}/` no
-SME-Identidade-Token-Microsservico, via `apps.core.clientes.token_ms`.
+`GET /usuarios/{login}/dados/`).
 
-`GET /perfis/{perfil}/acesso/` compõe o token enriquecido com
-`apps.autenticacao.token_enriquecido.compor_token_enriquecido`, incluindo
+`GET /usuarios/{login}/perfis/` consulta os perfis de acesso do usuário
+no SME-Identidade-Token-Microsservico. Já
+`GET /usuarios/{login}/perfis/{perfil}/acesso/` solicita ao
+SME-Identidade-Token-Microsservico a geração do token enriquecido por
+meio de `POST {TOKEN_MS_URL}/api/v1/token/enriquecido/{kc_user_id}/`,
+via `apps.core.clientes.token_ms`.
+
+`GET /perfis/{perfil}/acesso/` obtém do
+SME-Identidade-Token-Microsservico o token enriquecido correspondente
+ao perfil selecionado, incluindo
 a claim `perfilSelecionado` (o `{perfil}` da URL) — diferente do token
 composto no login, que ainda não tem um perfil selecionado.
-
-**Claims do token enriquecido:**
-
-| Claim | Origem |
-|---|---|
-| `sub`, `preferred_username`, `email` | Keycloak |
-| `rf`, `cpf` | Keycloak (sobrescrito pela projeção do Token-MS, se houver) |
-| `nome`, `situacao`, `dre_codigo`, `contrato_externo` | Token-MS (ausentes se não houver projeção) |
-| `perfis`, `permissoes` | Token-MS (listas vazias se não houver projeção) |
-| `perfilSelecionado` | Só em `GET /perfis/{perfil}/acesso/`, ausente no login |
-| `iss` | Sempre `"sme-identidade-gateway"` |
-| `iat`, `exp` | Emissão e expiração (`JWT_ENRIQUECIDO_TTL_SEGUNDOS`) |
 
 **Erros:**
 
@@ -156,76 +149,6 @@ composto no login, que ainda não tem um perfil selecionado.
 | Sem projeção para o usuário no Token-MS | `204 No Content` (sem corpo) |
 | Token-MS não responde a tempo | `504` |
 | Token-MS inacessível | `502` |
-
-### Como decodificar o token enriquecido
-
-O `token_enriquecido`/`token` retornado por `POST /login/` e
-`GET /perfis/{perfil}/acesso/` é um JWT assinado com `JWT_ENRIQUECIDO_SECRET`
-(`HS256` por padrão) — **não** é o `access_token` do Keycloak, então não
-valida contra o JWKS do Keycloak. Quem consome precisa da mesma chave
-configurada no Gateway para verificar a assinatura.
-
-**Python (`PyJWT`, mesma lib usada pelo Gateway):**
-
-```python
-import jwt
-
-claims = jwt.decode(
-    token_enriquecido,
-    "<valor de JWT_ENRIQUECIDO_SECRET>",
-    algorithms=["HS256"],  # ou o valor de JWT_ENRIQUECIDO_ALGORITMO
-)
-print(claims["rf"], claims["perfis"], claims["permissoes"])
-```
-
-Sem a chave (ex.: só inspecionar o payload durante desenvolvimento, sem
-verificar a assinatura), usar `jwt.decode(token, options={"verify_signature": False})`
-— **nunca** fazer isso em produção antes de confiar nos dados.
-
-**Node.js (`jsonwebtoken`):**
-
-```js
-const jwt = require("jsonwebtoken");
-
-const claims = jwt.verify(tokenEnriquecido, process.env.JWT_ENRIQUECIDO_SECRET, {
-  algorithms: ["HS256"],
-});
-console.log(claims.rf, claims.perfis, claims.permissoes);
-```
-
-**.NET (`System.IdentityModel.Tokens.Jwt`):**
-
-```csharp
-var handler = new JwtSecurityTokenHandler();
-var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtEnriquecidoSecret));
-var parametros = new TokenValidationParameters
-{
-    ValidateIssuerSigningKey = true,
-    IssuerSigningKey = key,
-    ValidateIssuer = true,
-    ValidIssuer = "sme-identidade-gateway",
-    ValidateAudience = false,
-};
-var principal = handler.ValidateToken(tokenEnriquecido, parametros, out _);
-```
-
-**Linha de comando (inspeção rápida, sem verificar assinatura):**
-
-```bash
-echo "$TOKEN_ENRIQUECIDO" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool
-```
-
-O payload base64 do meio do JWT (segunda parte, entre pontos) decodifica
-para o JSON das claims — útil para conferir o conteúdo em debug local, mas
-não substitui a verificação de assinatura em produção.
-
-**Debug visual:** colar o token em [jwt.io](https://jwt.io) mostra o
-payload decodificado; para verificar a assinatura lá, informar o mesmo
-valor de `JWT_ENRIQUECIDO_SECRET` no campo "Verify Signature" — **evitar
-colar tokens de produção em serviços externos**, usar só em ambiente local
-com secret de desenvolvimento.
-
-Ver a tabela de claims acima para o significado de cada campo do payload.
 
 ---
 
@@ -301,9 +224,6 @@ Content` (sem corpo).
 | `TOKEN_MS_TIMEOUT` | `10` | Timeout (segundos) das chamadas ao Token-MS |
 | `API_KEY_TOKEN_MS` | — | Chave de serviço a serviço Gateway → Token-MS (deve corresponder ao `API_KEY` do Token-MS) |
 | `API_KEY_TOKEN_MS_HEADER` | `X-API-Key` | Header onde a chave do Token-MS é enviada |
-| `JWT_ENRIQUECIDO_SECRET` | — | Chave de assinatura do token enriquecido (HMAC) — gerar um secret dedicado, nunca reaproveitar `DJANGO_SECRET_KEY` |
-| `JWT_ENRIQUECIDO_ALGORITMO` | `HS256` | Algoritmo de assinatura do token enriquecido |
-| `JWT_ENRIQUECIDO_TTL_SEGUNDOS` | `28800` (8h) | Tempo de vida do token enriquecido |
 
 `KEYCLOAK_LOGIN_CLIENT_ID` é distinto de `KEYCLOAK_CLIENT_ID`: o primeiro
 autentica usuário final (login), o segundo é usado só pela Admin API para

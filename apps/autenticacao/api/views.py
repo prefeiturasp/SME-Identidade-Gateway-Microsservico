@@ -7,9 +7,8 @@ autorização. Todas consultam serviços reais: ``LoginView`` e
 ``validar_login`` do SME-Identidade-ETL); ``LoginView``,
 ``PerfisPorLoginView`` e ``DadosAcessoView`` também consultam a
 projeção de autorização no SME-Identidade-Token-Microsservico (via
-``apps.core.clientes.token_ms``) e compõem o token enriquecido (via
-``apps.autenticacao.token_enriquecido``) — o Gateway é o próprio
-auth-gateway-ms da arquitetura normativa da plataforma.
+``apps.core.clientes.token_ms``), responsável por gerar o token
+enriquecido a partir dos dados da conta e da projeção do usuário.
 
 ``LoginView`` já devolve a resposta completa numa única chamada
 (token enriquecido + claims + perfis + permissões), sem exigir uma
@@ -38,33 +37,40 @@ from apps.autenticacao.api.serializers import (
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
 from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
-from apps.autenticacao.token_enriquecido import compor_token_enriquecido
 from apps.core.clientes.token_ms import cliente_token_ms
 from apps.core.http import resposta_do_servico
 
 _TOKEN_MS_INDISPONIVEL = {"erro": "token-ms indisponível"}
 
 
-def _buscar_projecao_token_ms(kc_user_id: str) -> dict | None:
-    """Busca a projeção de autorização do usuário no Token-MS.
+def _obter_token_enriquecido(
+    conta_keycloak: dict,
+    perfil: str | None,
+) -> dict | None:
+    """Obtém o token enriquecido gerado pelo Token-MS.
 
-    Usada tanto no login quanto nas consultas avulsas de
-    perfis/acesso — a ausência de projeção (``404``) ou uma falha de
-    comunicação não são tratadas como erro aqui: o chamador decide
-    se isso deve bloquear a operação (rotas de consulta avulsa,
-    ``204``) ou apenas resultar em claims vazias (login, que não deve
-    falhar por uma dependência complementar estar fora do ar).
+    O Token-MS é responsável por montar e assinar o token
+    enriquecido. Em caso de indisponibilidade do serviço ou ausência
+    de dados para o usuário, retorna ``None`` para que o login não
+    falhe por causa de uma dependência complementar.
 
     Args:
-        kc_user_id: UUID do usuário no Keycloak.
+        conta_keycloak: Dados da conta autenticada no Keycloak.
+        perfil: Identificador do perfil selecionado pelo usuário.
 
     Returns:
-        O corpo da projeção, ou ``None`` se não houver projeção ou o
-        Token-MS não puder ser consultado.
+        Corpo da resposta contendo o token enriquecido e sua data de
+        expiração, ou ``None`` caso não seja possível obtê-los.
     """
     try:
         with cliente_token_ms() as cliente:
-            resposta = cliente.get(f"/api/v1/perfis/{kc_user_id}/")
+            resposta = cliente.post(
+                f"/api/v1/token/enriquecido/{conta_keycloak['kc_user_id']}/",
+                json={
+                    **conta_keycloak,
+                    "perfil": perfil,
+                },
+            )
     except httpx.HTTPError:
         return None
 
@@ -95,8 +101,9 @@ class LoginView(APIView):
         """Recebe login/senha e autentica contra o Keycloak.
 
         Resposta completa numa única chamada: além dos tokens OIDC
-        brutos do Keycloak, busca a projeção no Token-MS e compõe o
-        token enriquecido — sem exigir uma segunda requisição a
+        brutos do Keycloak, solicita ao Token-MS o token
+        enriquecido já gerado e sua data de expiração —
+        sem exigir uma segunda requisição a
         ``DadosAcessoView``. Ausência de projeção no Token-MS (ou o
         serviço fora do ar) não bloqueia o login, já a autenticação
         no Keycloak é o que importa: as claims de ``perfis``/
@@ -123,12 +130,13 @@ class LoginView(APIView):
                 return Response(status=204)
             return Response({"detalhe": resultado["erro"]}, status=401)
 
-        projecao = _buscar_projecao_token_ms(resultado["kc_user_id"])
-        token_enriquecido, expiracao = compor_token_enriquecido(
-            resultado, projecao
+        token_enriquecido = (
+            _obter_token_enriquecido(resultado, perfil=None) or {}
         )
-        resultado["token_enriquecido"] = token_enriquecido
-        resultado["data_expiracao_token_enriquecido"] = expiracao
+        resultado["token_enriquecido"] = token_enriquecido.get("token")
+        resultado["data_expiracao_token_enriquecido"] = token_enriquecido.get(
+            "data_expiracao"
+        )
 
         saida = LoginResponseSerializer(resultado)
         return Response(saida.data)
@@ -174,8 +182,8 @@ def _resolver_conta_keycloak(login: str) -> dict | None:
     recebem. Reaproveita ``obter_dados_usuario`` (mesma normalização
     usada por ``DadosUsuarioView``) em vez de lidar com o formato
     bruto do Keycloak (``attributes`` como listas) em mais de um
-    lugar — o formato retornado já é o esperado por
-    ``compor_token_enriquecido``.
+    lugar — o formato retornado já é o esperado pelo
+    ``Token-MS``.
 
     Args:
         login: RF, CPF, e-mail ou username do usuário.
@@ -245,11 +253,14 @@ class DadosAcessoView(APIView):
     """Retorna o contexto de acesso completo de um usuário/perfil.
 
     Equivale a ``GET /api/AutenticacaoSgp/CarregarDadosAcesso/
-    usuarios/{login}/perfis/{perfil}``. ``permissoes`` vem da
-    projeção real no SME-Identidade-Token-Microsservico. O ``token``
-    é o JWT enriquecido, composto pelo próprio Gateway (auth-gateway-ms)
-    a partir das claims do Keycloak e da projeção do Token-MS — ver
-    ``apps.autenticacao.token_enriquecido``.
+    usuarios/{login}/perfis/{perfil}``.
+
+    O JWT enriquecido é gerado pelo SME-Identidade-Token-Microsserviço,
+    que é responsável por buscar a projeção de autorização, compor as
+    claims e assinar o token.
+
+    O Gateway apenas solicita o token ao Token-MS e retorna o contexto
+    de acesso ao cliente.
     """
 
     authentication_classes = [AutenticacaoApiKey]
@@ -277,8 +288,12 @@ class DadosAcessoView(APIView):
 
         try:
             with cliente_token_ms() as cliente:
-                resposta = cliente.get(
-                    f"/api/v1/perfis/{conta['kc_user_id']}/"
+                resposta = cliente.post(
+                    f"/api/v1/token/enriquecido/{conta['kc_user_id']}/",
+                    json={
+                        **conta,
+                        "perfil": perfil,
+                    },
                 )
         except httpx.TimeoutException:
             return Response({"erro": "token-ms timeout"}, status=504)
@@ -290,13 +305,15 @@ class DadosAcessoView(APIView):
         if resposta.status_code != 200:
             return resposta_do_servico(resposta)
 
-        projecao = resposta.json()
-        token, expiracao = compor_token_enriquecido(conta, projecao, perfil)
+        dados_token = resposta.json()
         saida = DadosAcessoResponseSerializer(
             {
-                "token": token,
-                "data_expiracao_token": expiracao,
-                "permissoes": projecao.get("permissoes", []),
+                "token": dados_token.get("token"),
+                "data_expiracao_token": dados_token.get("data_expiracao"),
+                "permissoes": dados_token.get(
+                    "permissoes",
+                    [],
+                ),
             }
         )
         return Response(saida.data)
