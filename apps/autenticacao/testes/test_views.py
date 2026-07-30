@@ -4,7 +4,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
-import jwt
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -12,6 +11,7 @@ from rest_framework.test import APIClient
 
 _KEYCLOAK_ADMIN = "apps.autenticacao.api.views.keycloak_admin"
 _CLIENTE_TOKEN_MS = "apps.autenticacao.api.views.cliente_token_ms"
+
 
 _CONTA_KEYCLOAK = {
     "kc_user_id": "5c29cc47-...",
@@ -22,6 +22,21 @@ _CONTA_KEYCLOAK = {
     "cpf": "12345678900",
     "rf": "1234567",
 }
+
+
+_PERMISSOES = [
+    {
+        "sistema_id": 1,
+        "sistema_nome": "CoreSSO",
+        "modulo_id": 3,
+        "modulo_nome": "Usuários",
+        "consultar": True,
+        "inserir": False,
+        "alterar": False,
+        "excluir": False,
+    }
+]
+
 
 _PROJECAO_TOKEN_MS = {
     "usuario_id": _CONTA_KEYCLOAK["kc_user_id"],
@@ -34,251 +49,342 @@ _PROJECAO_TOKEN_MS = {
             "ativo": True,
         }
     ],
-    "permissoes": [
-        {
-            "sistema_id": 1,
-            "sistema_nome": "CoreSSO",
-            "modulo_id": 3,
-            "modulo_nome": "Usuários",
-            "consultar": True,
-            "inserir": False,
-            "alterar": False,
-            "excluir": False,
-        },
-    ],
+    "permissoes": _PERMISSOES,
 }
 
 
-def _mock_cliente(resposta: httpx.Response) -> MagicMock:
-    """Monta um MagicMock de cliente_token_ms() usável como context manager."""
+def _mock_cliente(
+    resposta: httpx.Response,
+) -> MagicMock:
+    """Mock do cliente HTTP do Token-MS."""
     cliente = MagicMock()
+
     cliente.__enter__.return_value = cliente
+
     cliente.get.return_value = resposta
+    cliente.post.return_value = resposta
+
     return cliente
 
 
-def _resposta_token_ms(corpo: dict, status_code: int = 200) -> httpx.Response:
-    """Monta uma resposta simulada do Token-MS para o usuário de teste."""
+def _resposta_perfis_token_ms(
+    corpo: dict,
+    status_code: int = 200,
+) -> httpx.Response:
+    """Resposta simulada do endpoint de perfis."""
     return httpx.Response(
         status_code,
         json=corpo,
         request=httpx.Request(
             "GET",
-            f"http://token-ms/api/v1/perfis/{_CONTA_KEYCLOAK['kc_user_id']}/",
+            (
+                "http://token-ms/api/v1/perfis/"
+                f"{_CONTA_KEYCLOAK['kc_user_id']}/"
+            ),
+        ),
+    )
+
+
+def _resposta_token_enriquecido(
+    corpo: dict,
+    status_code: int = 200,
+) -> httpx.Response:
+    """Resposta simulada da geração do token enriquecido."""
+    return httpx.Response(
+        status_code,
+        json=corpo,
+        request=httpx.Request(
+            "POST",
+            (
+                "http://token-ms/api/v1/token/enriquecido/"
+                f"{_CONTA_KEYCLOAK['kc_user_id']}/"
+            ),
         ),
     )
 
 
 class TestAutenticacaoEndpoints:
-    """Testes de autenticação e autorização exigidas pelos endpoints."""
+    """Testes dos endpoints de autenticação."""
 
     @pytest.fixture(autouse=True)
-    def _configura_api_key(self, settings: Any) -> None:
-        """Define API_KEY/API_KEY_HEADER e o secret do token enriquecido."""
+    def _configura_api_key(
+        self,
+        settings: Any,
+    ) -> None:
+        """Configura autenticação dos testes."""
         settings.API_KEY = "chave-secreta"
         settings.API_KEY_HEADER = "X-API-Key"
-        settings.JWT_ENRIQUECIDO_SECRET = "secret-de-teste"
-        settings.JWT_ENRIQUECIDO_ALGORITMO = "HS256"
-        settings.JWT_ENRIQUECIDO_TTL_SEGUNDOS = 28800
+
+        settings.JWT_ENRIQUECIDO_ALGORITMO = "RS256"
 
     def test_login_sem_api_key_retorna_401(self) -> None:
-        """Deve rejeitar requisição sem API Key."""
+        """Deve bloquear sem API Key."""
         response = APIClient().post(
             reverse("login"),
-            data={"login": "1234567", "senha": "x"},
+            data={
+                "login": "1234567",
+                "senha": "x",
+            },
             format="json",
         )
 
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.status_code == (status.HTTP_401_UNAUTHORIZED)
 
-    def test_login_com_api_key_invalida_retorna_401(self) -> None:
-        """Deve rejeitar requisição com API Key incorreta."""
+    def test_login_com_api_key_invalida_retorna_401(
+        self,
+    ) -> None:
+        """Deve bloquear API Key inválida."""
         response = APIClient().post(
             reverse("login"),
-            data={"login": "1234567", "senha": "x"},
+            data={
+                "login": "1234567",
+                "senha": "x",
+            },
             format="json",
-            HTTP_X_API_KEY="chave-errada",
+            HTTP_X_API_KEY="errada",
         )
 
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.status_code == (status.HTTP_401_UNAUTHORIZED)
 
-    def test_login_com_sucesso_retorna_resposta_completa(self) -> None:
-        """Deve autenticar, compor o token enriquecido e trazer perfis."""
+    def test_login_com_sucesso_retorna_token_enriquecido(
+        self,
+    ) -> None:
+        """Deve autenticar e retornar token enriquecido."""
         resultado = {
             "autenticado": True,
-            "kc_user_id": "5c29cc47-...",
-            "username": "1234567",
-            "nome": "FULANO DE TAL",
-            "email": "fulano@sme.sp.gov.br",
-            "ativo": True,
-            "cpf": "12345678900",
-            "rf": "1234567",
-            "roles": {
-                "realm_access": {"roles": ["default-roles-cotic"]},
-                "resource_access": {"auto-servico-qa": {"roles": ["COTIC"]}},
-            },
+            **_CONTA_KEYCLOAK,
+            "roles": {"realm_access": {"roles": ["default-roles-cotic"]}},
             "access_token": "token-jwt",
             "refresh_token": "refresh-jwt",
             "expires_in": 300,
         }
-        resposta_token_ms = _resposta_token_ms(_PROJECAO_TOKEN_MS)
+
+        resposta_token = _resposta_token_enriquecido(
+            {
+                "token": "jwt-enriquecido",
+                "data_expiracao": ("2026-07-24T20:00:00Z"),
+            }
+        )
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
             patch(
                 _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta_token_ms),
-            ),
+                return_value=_mock_cliente(resposta_token),
+            ) as mock_cliente_token_ms,
         ):
             mock_keycloak_admin.autenticar.return_value = resultado
+
             response = APIClient().post(
                 reverse("login"),
-                data={"login": "1234567", "senha": "x"},
+                data={
+                    "login": "1234567",
+                    "senha": "x",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == 200
+
         corpo = response.json()
-        assert corpo["kc_user_id"] == "5c29cc47-..."
-        assert corpo["username"] == "1234567"
+
+        assert corpo["kc_user_id"] == (_CONTA_KEYCLOAK["kc_user_id"])
+
         assert corpo["access_token"] == "token-jwt"
-        assert corpo["roles"]["realm_access"] == {
-            "roles": ["default-roles-cotic"]
-        }
-        assert "perfis" not in corpo
-        assert "permissoes" not in corpo
 
-        claims = jwt.decode(
-            corpo["token_enriquecido"],
-            "secret-de-teste",
-            algorithms=["HS256"],
+        assert corpo["token_enriquecido"] == ("jwt-enriquecido")
+
+        assert corpo["data_expiracao_token_enriquecido"] is not None
+
+        mock_keycloak_admin.autenticar.assert_called_once_with(
+            "1234567",
+            "x",
         )
-        assert claims["sub"] == "5c29cc47-..."
-        assert claims["rf"] == "1234567"
-        assert claims["perfis"][0]["nome"] == "professor"
-        assert claims["permissoes"][0]["sistema_nome"] == "CoreSSO"
-        assert "perfilSelecionado" not in claims
 
-        mock_keycloak_admin.autenticar.assert_called_once_with("1234567", "x")
+        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
 
-    def test_login_com_token_ms_indisponivel_nao_falha(self) -> None:
-        """Login não deve falhar se o Token-MS estiver fora do ar."""
+        cliente.post.assert_called_once()
+
+    def test_login_com_token_ms_indisponivel_nao_falha(
+        self,
+    ) -> None:
+        """Login deve continuar mesmo sem Token-MS."""
         resultado = {
             "autenticado": True,
-            "kc_user_id": "5c29cc47-...",
-            "username": "1234567",
-            "nome": "FULANO DE TAL",
-            "email": "fulano@sme.sp.gov.br",
-            "ativo": True,
-            "cpf": "12345678900",
-            "rf": "1234567",
+            **_CONTA_KEYCLOAK,
             "roles": {},
             "access_token": "token-jwt",
             "refresh_token": "refresh-jwt",
             "expires_in": 300,
         }
+
         cliente = MagicMock()
+
         cliente.__enter__.return_value = cliente
-        cliente.get.side_effect = httpx.ConnectError("recusado")
+
+        cliente.post.side_effect = httpx.ConnectError("recusado")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(_CLIENTE_TOKEN_MS, return_value=cliente),
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=cliente,
+            ),
         ):
             mock_keycloak_admin.autenticar.return_value = resultado
+
             response = APIClient().post(
                 reverse("login"),
-                data={"login": "1234567", "senha": "x"},
+                data={
+                    "login": "1234567",
+                    "senha": "x",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_200_OK
-        corpo = response.json()
-        assert "token_enriquecido" in corpo
-        claims = jwt.decode(
-            corpo["token_enriquecido"],
-            "secret-de-teste",
-            algorithms=["HS256"],
-        )
-        assert claims["perfis"] == []
-        assert claims["permissoes"] == []
+        assert response.status_code == 200
 
-    def test_login_com_senha_invalida_retorna_401(self) -> None:
-        """Deve retornar 401 quando a autenticação falhar por senha."""
+        corpo = response.json()
+
+        assert corpo["token_enriquecido"] is None
+
+        assert corpo["data_expiracao_token_enriquecido"] is None
+
+    def test_login_com_token_ms_erro_nao_falha(
+        self,
+    ) -> None:
+        """Login deve continuar quando Token-MS retorna erro."""
+        resultado = {
+            "autenticado": True,
+            **_CONTA_KEYCLOAK,
+            "roles": {},
+            "access_token": "token-jwt",
+            "refresh_token": "refresh-jwt",
+            "expires_in": 300,
+        }
+
+        resposta = _resposta_token_enriquecido(
+            {"erro": "falha interna"},
+            status_code=500,
+        )
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=_mock_cliente(resposta),
+            ),
+        ):
+            mock_keycloak_admin.autenticar.return_value = resultado
+
+            response = APIClient().post(
+                reverse("login"),
+                data={
+                    "login": "1234567",
+                    "senha": "x",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 200
+
+        corpo = response.json()
+
+        assert corpo["token_enriquecido"] is None
+
+    def test_login_com_senha_invalida_retorna_401(
+        self,
+    ) -> None:
+        """Deve retornar 401 para senha inválida."""
         with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
             mock_keycloak_admin.autenticar.return_value = {
                 "autenticado": False,
                 "erro": "invalid_grant",
             }
+
             response = APIClient().post(
                 reverse("login"),
-                data={"login": "1234567", "senha": "errada"},
+                data={
+                    "login": "1234567",
+                    "senha": "errada",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.status_code == 401
 
-    def test_login_usuario_nao_encontrado_retorna_204(self) -> None:
-        """Deve retornar 204 (não 404) quando o login não existir.
-
-        204 não tem corpo por definição do protocolo HTTP.
-        """
+    def test_login_usuario_nao_encontrado_retorna_204(
+        self,
+    ) -> None:
+        """Usuário inexistente retorna 204."""
         with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
             mock_keycloak_admin.autenticar.return_value = {
                 "autenticado": False,
                 "erro": "usuário não encontrado",
             }
+
             response = APIClient().post(
                 reverse("login"),
-                data={"login": "0000000", "senha": "x"},
+                data={
+                    "login": "0000000",
+                    "senha": "x",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.status_code == 204
         assert not response.content
 
-    def test_dados_usuario_retorna_dados_reais(self) -> None:
-        """Deve retornar os dados cadastrais consultados no Keycloak."""
-        dados = {
-            "kc_user_id": "5c29cc47-...",
-            "username": "1234567",
-            "nome": "FULANO DE TAL",
-            "email": "fulano@sme.sp.gov.br",
-            "ativo": True,
-            "cpf": "12345678900",
-            "rf": "1234567",
-        }
+    def test_dados_usuario_retorna_dados_reais(
+        self,
+    ) -> None:
+        """Deve retornar dados do Keycloak."""
         with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
-            mock_keycloak_admin.obter_dados_usuario.return_value = dados
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
             response = APIClient().get(
-                reverse("usuario-dados", kwargs={"login": "1234567"}),
+                reverse(
+                    "usuario-dados",
+                    kwargs={"login": "1234567"},
+                ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json()["rf"] == "1234567"
-        mock_keycloak_admin.obter_dados_usuario.assert_called_once_with(
-            "1234567"
-        )
+        assert response.status_code == 200
 
-    def test_dados_usuario_nao_encontrado_retorna_204(self) -> None:
-        """Deve retornar 204 (não 404) quando o usuário não existir."""
+        assert response.json()["rf"] == ("1234567")
+
+    def test_dados_usuario_nao_encontrado_retorna_204(
+        self,
+    ) -> None:
+        """Usuário inexistente retorna 204."""
         with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
             mock_keycloak_admin.obter_dados_usuario.return_value = None
+
             response = APIClient().get(
-                reverse("usuario-dados", kwargs={"login": "0000000"}),
+                reverse(
+                    "usuario-dados",
+                    kwargs={"login": "0000000"},
+                ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.status_code == 204
         assert not response.content
 
-    def test_perfis_por_login_retorna_projecao_real_do_token_ms(self) -> None:
-        """Deve resolver a conta e consultar o Token-MS de verdade."""
-        resposta_token_ms = _resposta_token_ms(_PROJECAO_TOKEN_MS)
+    def test_perfis_por_login_retorna_projecao_real_do_token_ms(
+        self,
+    ) -> None:
+        """Deve retornar perfis vindos do Token-MS."""
+        resposta_token_ms = _resposta_perfis_token_ms(_PROJECAO_TOKEN_MS)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
             patch(
@@ -289,160 +395,380 @@ class TestAutenticacaoEndpoints:
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
             )
+
             response = APIClient().get(
-                reverse("usuario-perfis", kwargs={"login": "1234567"}),
+                reverse(
+                    "usuario-perfis",
+                    kwargs={"login": "1234567"},
+                ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == 200
+
         corpo = response.json()
+
         assert corpo["rf"] == "1234567"
-        assert corpo["perfis"][0]["nome"] == "professor"
+
+        assert corpo["perfis"][0]["nome"] == ("professor")
+
         cliente = mock_cliente_token_ms.return_value.__enter__.return_value
+
         cliente.get.assert_called_once_with(
-            f"/api/v1/perfis/{_CONTA_KEYCLOAK['kc_user_id']}/"
+            "/api/v1/perfis/" f"{_CONTA_KEYCLOAK['kc_user_id']}/"
         )
 
-    def test_perfis_por_login_sem_conta_no_keycloak_retorna_204(self) -> None:
-        """Deve retornar 204 sem chamar o Token-MS se o login não existir."""
+    def test_perfis_por_login_sem_conta_keycloak_retorna_204(
+        self,
+    ) -> None:
+        """Não deve chamar Token-MS sem usuário."""
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
             patch(_CLIENTE_TOKEN_MS) as mock_cliente_token_ms,
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = None
+
             response = APIClient().get(
-                reverse("usuario-perfis", kwargs={"login": "0000000"}),
+                reverse(
+                    "usuario-perfis",
+                    kwargs={"login": "0000000"},
+                ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.status_code == 204
+
         mock_cliente_token_ms.assert_not_called()
 
-    def test_perfis_por_login_sem_projecao_no_token_ms_retorna_204(
+    def test_perfis_por_login_sem_projecao_retorna_204(
         self,
     ) -> None:
-        """Deve retornar 204 quando o Token-MS não tiver projeção."""
-        resposta_token_ms = _resposta_token_ms(
-            {"detail": "Projeção de usuário não encontrada."}, 404
+        """Deve retornar 204 quando não existir projeção."""
+        resposta = _resposta_perfis_token_ms(
+            {"detail": ("Projeção de usuário não encontrada.")},
+            status_code=404,
         )
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
             patch(
                 _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta_token_ms),
+                return_value=_mock_cliente(resposta),
             ),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
             )
+
             response = APIClient().get(
-                reverse("usuario-perfis", kwargs={"login": "1234567"}),
+                reverse(
+                    "usuario-perfis",
+                    kwargs={"login": "1234567"},
+                ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.status_code == 204
 
-    def test_perfis_por_login_com_timeout_retorna_504(self) -> None:
-        """Deve retornar 504 quando o Token-MS não responder a tempo."""
+    def test_perfis_por_login_com_timeout_retorna_504(
+        self,
+    ) -> None:
+        """Timeout do Token-MS retorna 504."""
         cliente = MagicMock()
+
         cliente.__enter__.return_value = cliente
+
         cliente.get.side_effect = httpx.TimeoutException("timeout")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(_CLIENTE_TOKEN_MS, return_value=cliente),
-        ):
-            mock_keycloak_admin.obter_dados_usuario.return_value = (
-                _CONTA_KEYCLOAK
-            )
-            response = APIClient().get(
-                reverse("usuario-perfis", kwargs={"login": "1234567"}),
-                HTTP_X_API_KEY="chave-secreta",
-            )
-
-        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT
-
-    def test_perfis_por_login_com_token_ms_indisponivel_retorna_502(
-        self,
-    ) -> None:
-        """Deve retornar 502 quando o Token-MS estiver inacessível."""
-        cliente = MagicMock()
-        cliente.__enter__.return_value = cliente
-        cliente.get.side_effect = httpx.ConnectError("recusado")
-
-        with (
-            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(_CLIENTE_TOKEN_MS, return_value=cliente),
-        ):
-            mock_keycloak_admin.obter_dados_usuario.return_value = (
-                _CONTA_KEYCLOAK
-            )
-            response = APIClient().get(
-                reverse("usuario-perfis", kwargs={"login": "1234567"}),
-                HTTP_X_API_KEY="chave-secreta",
-            )
-
-        assert response.status_code == status.HTTP_502_BAD_GATEWAY
-
-    def test_dados_acesso_retorna_token_enriquecido_e_permissoes(
-        self,
-    ) -> None:
-        """Deve retornar o token enriquecido e as permissões reais."""
-        resposta_token_ms = _resposta_token_ms(_PROJECAO_TOKEN_MS)
-        with (
-            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
             patch(
                 _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta_token_ms),
+                return_value=cliente,
             ),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
             )
+
             response = APIClient().get(
                 reverse(
-                    "usuario-dados-acesso",
-                    kwargs={"login": "1234567", "perfil": "professor"},
+                    "usuario-perfis",
+                    kwargs={"login": "1234567"},
                 ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_200_OK
-        corpo = response.json()
-        assert corpo["permissoes"] == [
+        assert response.status_code == 504
+
+    def test_perfis_por_login_token_ms_indisponivel_retorna_502(
+        self,
+    ) -> None:
+        """Erro de transporte retorna 502."""
+        cliente = MagicMock()
+
+        cliente.__enter__.return_value = cliente
+
+        cliente.get.side_effect = httpx.TransportError("falha conexão")
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=cliente,
+            ),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-perfis",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 502
+
+    def test_dados_acesso_retorna_token_e_permissoes(
+        self,
+    ) -> None:
+        """Deve retornar token enriquecido e permissões."""
+        resposta = _resposta_token_enriquecido(
             {
-                "sistema_id": 1,
-                "sistema_nome": "CoreSSO",
-                "modulo_id": 3,
-                "modulo_nome": "Usuários",
-                "consultar": True,
-                "inserir": False,
-                "alterar": False,
-                "excluir": False,
+                "token": "jwt-enriquecido",
+                "data_expiracao": ("2026-07-24T20:00:00Z"),
+                "permissoes": _PERMISSOES,
             }
-        ]
-
-        claims = jwt.decode(
-            corpo["token"], "secret-de-teste", algorithms=["HS256"]
         )
-        assert claims["sub"] == _CONTA_KEYCLOAK["kc_user_id"]
-        assert claims["perfilSelecionado"] == "professor"
-        assert claims["permissoes"][0]["sistema_nome"] == "CoreSSO"
 
-    def test_dados_acesso_sem_conta_no_keycloak_retorna_204(self) -> None:
-        """Deve retornar 204 sem chamar o Token-MS se o login não existir."""
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=_mock_cliente(resposta),
+            ) as mock_cliente_token_ms,
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-dados-acesso",
+                    kwargs={
+                        "login": "1234567",
+                        "perfil": "professor",
+                    },
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 200
+
+        corpo = response.json()
+
+        assert corpo["token"] == ("jwt-enriquecido")
+
+        assert corpo["permissoes"][0]["sistema_nome"] == "CoreSSO"
+
+        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
+
+        cliente.post.assert_called_once_with(
+            ("/api/v1/token/enriquecido/" f"{_CONTA_KEYCLOAK['kc_user_id']}/"),
+            json={
+                **_CONTA_KEYCLOAK,
+                "perfil": "professor",
+            },
+        )
+
+    def test_dados_acesso_sem_conta_keycloak_retorna_204(
+        self,
+    ) -> None:
+        """Não deve chamar Token-MS sem usuário."""
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
             patch(_CLIENTE_TOKEN_MS) as mock_cliente_token_ms,
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = None
+
             response = APIClient().get(
                 reverse(
                     "usuario-dados-acesso",
-                    kwargs={"login": "0000000", "perfil": "professor"},
+                    kwargs={
+                        "login": "0000000",
+                        "perfil": "professor",
+                    },
                 ),
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.status_code == 204
+
         mock_cliente_token_ms.assert_not_called()
+
+    def test_dados_acesso_sem_projecao_retorna_204(
+        self,
+    ) -> None:
+        """Token-MS sem usuário retorna 204."""
+        resposta = _resposta_token_enriquecido(
+            {"detail": ("Projeção não encontrada")},
+            status_code=404,
+        )
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=_mock_cliente(resposta),
+            ),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-dados-acesso",
+                    kwargs={
+                        "login": "1234567",
+                        "perfil": "professor",
+                    },
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 204
+
+    def test_dados_acesso_com_timeout_retorna_504(
+        self,
+    ) -> None:
+        """Timeout ao gerar token retorna 504."""
+        cliente = MagicMock()
+
+        cliente.__enter__.return_value = cliente
+
+        cliente.post.side_effect = httpx.TimeoutException("timeout")
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=cliente,
+            ),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-dados-acesso",
+                    kwargs={
+                        "login": "1234567",
+                        "perfil": "professor",
+                    },
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 504
+
+    def test_dados_acesso_token_ms_indisponivel_retorna_502(
+        self,
+    ) -> None:
+        """Falha de conexão retorna 502."""
+        cliente = MagicMock()
+
+        cliente.__enter__.return_value = cliente
+
+        cliente.post.side_effect = httpx.TransportError("falha conexão")
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=cliente,
+            ),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-dados-acesso",
+                    kwargs={
+                        "login": "1234567",
+                        "perfil": "professor",
+                    },
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 502
+
+    def test_perfis_por_login_com_erro_generico_token_ms_retorna_erro(
+        self,
+    ) -> None:
+        """Deve repassar erro do Token-MS."""
+        resposta = _resposta_perfis_token_ms(
+            {"erro": "erro interno"},
+            status_code=500,
+        )
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=_mock_cliente(resposta),
+            ),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-perfis",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 500
+
+    def test_dados_acesso_com_erro_generico_token_ms_retorna_erro(
+        self,
+    ) -> None:
+        """Deve repassar erro do Token-MS."""
+        resposta = _resposta_token_enriquecido(
+            {"erro": "erro interno"},
+            status_code=500,
+        )
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(
+                _CLIENTE_TOKEN_MS,
+                return_value=_mock_cliente(resposta),
+            ),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-dados-acesso",
+                    kwargs={
+                        "login": "1234567",
+                        "perfil": "professor",
+                    },
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 500
