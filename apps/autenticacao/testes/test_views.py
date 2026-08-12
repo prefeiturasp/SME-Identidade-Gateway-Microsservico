@@ -340,6 +340,69 @@ class TestAutenticacaoEndpoints:
         assert response.status_code == 204
         assert not response.content
 
+    def test_logout_sem_api_key_retorna_401(self) -> None:
+        """Deve bloquear sem API Key."""
+        response = APIClient().post(
+            reverse("logout"),
+            data={"refresh_token": "token-qualquer"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_logout_sem_refresh_token_retorna_400(self) -> None:
+        """Deve recusar o corpo sem refresh_token."""
+        response = APIClient().post(
+            reverse("logout"),
+            data={},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_logout_encerra_sessao_e_dispara_gatilho(self) -> None:
+        """Deve encerrar a sessão e disparar o gatilho de auditoria."""
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.encerrar_sessao.return_value = {
+                "encerrada": True,
+                "kc_user_id": _CONTA_KEYCLOAK["kc_user_id"],
+            }
+
+            response = APIClient().post(
+                reverse("logout"),
+                data={"refresh_token": "refresh-valido"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"situacao": "sessao_encerrada"}
+        mock_keycloak_admin.encerrar_sessao.assert_called_once_with(
+            "refresh-valido"
+        )
+
+    def test_logout_com_token_ja_invalido_nao_falha(self) -> None:
+        """Deve responder normalmente mesmo com token já expirado.
+
+        O resultado prático (sessão encerrada) já é o mesmo, então a
+        resposta ao cliente não deve distinguir os dois casos.
+        """
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.encerrar_sessao.return_value = {
+                "encerrada": False,
+                "kc_user_id": None,
+            }
+
+            response = APIClient().post(
+                reverse("logout"),
+                data={"refresh_token": "refresh-expirado"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
     def test_dados_usuario_retorna_dados_reais(
         self,
     ) -> None:

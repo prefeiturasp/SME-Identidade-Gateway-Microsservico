@@ -22,6 +22,7 @@ SME-Identidade-Token-Microsservico.
 """
 
 import httpx
+from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -33,9 +34,12 @@ from apps.autenticacao.api.serializers import (
     DadosUsuarioResponseSerializer,
     LoginRequestSerializer,
     LoginResponseSerializer,
+    LogoutRequestSerializer,
+    LogoutResponseSerializer,
     PerfisPorLoginResponseSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
+from apps.autenticacao.gatilho_auditoria import disparar_gatilho
 from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
 from apps.core.clientes.token_ms import cliente_token_ms
 from apps.core.http import resposta_do_servico
@@ -110,6 +114,12 @@ class LoginView(APIView):
         ``permissoes`` dentro do token enriquecido ficam vazias nesse
         caso.
 
+        Autenticado o usuário, dispara também o gatilho de auditoria
+        — acessório e silencioso em caso de falha, pelo mesmo motivo
+        que o token enriquecido: o login já aconteceu de verdade no
+        Keycloak e não deve ser desfeito por uma dependência
+        complementar.
+
         Args:
             request: Requisição HTTP com ``login`` e ``senha``.
 
@@ -130,6 +140,11 @@ class LoginView(APIView):
                 return Response(status=204)
             return Response({"detalhe": resultado["erro"]}, status=401)
 
+        disparar_gatilho(
+            settings.KEYCLOAK_REALM,
+            resultado.get("kc_user_id"),
+        )
+
         token_enriquecido = (
             _obter_token_enriquecido(resultado, perfil=None) or {}
         )
@@ -139,6 +154,49 @@ class LoginView(APIView):
         )
 
         saida = LoginResponseSerializer(resultado)
+        return Response(saida.data)
+
+
+class LogoutView(APIView):
+    """Encerra a sessão de um usuário no Keycloak.
+
+    O Gateway não mantém sessão própria — encerrar a sessão depende
+    de repassar ao Keycloak o ``refresh_token`` obtido no login.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=LogoutRequestSerializer,
+        responses=LogoutResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Recebe o refresh token e encerra a sessão no Keycloak.
+
+        Dispara também o gatilho de auditoria, no mesmo padrão do
+        login — acessório e silencioso em caso de falha.
+
+        Args:
+            request: Requisição HTTP com ``refresh_token``.
+
+        Returns:
+            Confirmação do encerramento; ``400`` se o
+            ``refresh_token`` não vier no corpo.
+        """
+        entrada = LogoutRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        resultado = keycloak_admin.encerrar_sessao(
+            entrada.validated_data["refresh_token"]
+        )
+
+        disparar_gatilho(
+            settings.KEYCLOAK_REALM,
+            resultado.get("kc_user_id"),
+        )
+
+        saida = LogoutResponseSerializer({"situacao": "sessao_encerrada"})
         return Response(saida.data)
 
 

@@ -109,6 +109,39 @@ mensagem de detalhe.
 | `buscar_usuario_por_login(admin, login)` | `get_users()` por username exato, depois atributos `rf`/`cpf`/`email` |
 | `autenticar(login, senha)` | Resolve a conta e chama `KeycloakOpenID.token()` (grant `password`) |
 | `obter_dados_usuario(login)` | Resolve a conta e retorna os dados normalizados |
+| `encerrar_sessao(refresh_token)` | Chama `KeycloakOpenID.logout()` com o refresh token — ver seção Logout, abaixo |
+| `decodificar_claims_token(token)` | Decodifica o payload de um JWT (access ou refresh token) sem validar assinatura — usada para extrair `roles` em `autenticar` e o `sub` (kc_user_id) em `encerrar_sessao` |
+
+---
+
+## Logout (real — Keycloak)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `POST` | `/logout/` | Encerra a sessão associada a um refresh token |
+
+O Gateway não mantém sessão própria — encerrar a sessão do usuário depende de repassar ao
+Keycloak o `refresh_token` obtido no login.
+
+```json
+// POST /logout/
+{"refresh_token": "eyJhbGci..."}
+```
+
+```json
+// 200
+{"situacao": "sessao_encerrada"}
+```
+
+Se o token já estiver inválido ou expirado, a resposta continua `200` — o resultado prático
+(sessão encerrada) já é o mesmo, então o cliente não precisa distinguir os dois casos.
+
+**Erros:**
+
+| Situação | Status |
+|---|---|
+| Sem `refresh_token` no corpo | `400` |
+| Sem `X-API-Key` | `401` |
 
 ---
 
@@ -208,6 +241,33 @@ Content` (sem corpo).
 
 ---
 
+## Aviso de atividade ao Audit-MS
+
+`POST /login/`, `POST /logout/`, `POST /alterar-senha/` e `POST /alterar-email/` avisam o
+SME-Identidade-Audit-Microsservico de que houve atividade do usuário
+(`apps/autenticacao/gatilho_auditoria.py`).
+
+O `usuario_id` do aviso vem de fontes diferentes conforme a rota: em `/login/`, da conta resolvida
+por `keycloak_admin.autenticar`; em `/logout/`, extraído do próprio `refresh_token` (função
+`decodificar_claims_token`) — o endpoint de logout não recebe login/senha, só o token; em
+`/alterar-senha/` e `/alterar-email/`, resolvido a partir do `login` recebido
+(`disparar_gatilho_por_login`).
+
+O que trafega é apenas `{"realm", "usuario_id"}` — **não** um evento de
+auditoria. Dois produtores de evento gerariam timestamps distintos para a
+mesma atividade, e a deduplicação no destino teria de reconciliar formatos
+divergentes; com o aviso mínimo, o Keycloak segue como origem única do dado.
+O aviso apenas antecipa a leitura, que aconteceria de todo modo no ciclo
+agendado do Audit-MS.
+
+O disparo é acessório ao fluxo que o usuário está esperando: falha de rede,
+timeout ou destino fora do ar são engolidos, no mesmo padrão de degradação
+graciosa já usado quando o token enriquecido não pode ser obtido. Login e
+trocas de credencial continuam respondendo normalmente com o Audit-MS fora do
+ar.
+
+---
+
 ## Configuração
 
 | Variável | Padrão | Descrição |
@@ -224,6 +284,10 @@ Content` (sem corpo).
 | `TOKEN_MS_TIMEOUT` | `10` | Timeout (segundos) das chamadas ao Token-MS |
 | `API_KEY_TOKEN_MS` | — | Chave de serviço a serviço Gateway → Token-MS (deve corresponder ao `API_KEY` do Token-MS) |
 | `API_KEY_TOKEN_MS_HEADER` | `X-API-Key` | Header onde a chave do Token-MS é enviada |
+| `AUDIT_MS_URL` | `http://audit-ms:8000/identidade-auditoria` | URL base do SME-Identidade-Audit-Microsservico |
+| `AUDIT_MS_TIMEOUT` | `2` | Timeout (segundos) do aviso de atividade — curto porque o disparo acontece dentro de fluxos que o usuário aguarda |
+| `API_KEY_AUDIT_MS` | — | Chave de serviço a serviço Gateway → Audit-MS (deve corresponder ao `API_KEY` do Audit-MS) |
+| `API_KEY_AUDIT_MS_HEADER` | `X-API-Key` | Header onde a chave do Audit-MS é enviada |
 
 `KEYCLOAK_LOGIN_CLIENT_ID` é distinto de `KEYCLOAK_CLIENT_ID`: o primeiro
 autentica usuário final (login), o segundo é usado só pela Admin API para

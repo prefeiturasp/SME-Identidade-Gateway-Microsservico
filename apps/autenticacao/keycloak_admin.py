@@ -211,24 +211,27 @@ def buscar_usuario_por_login(admin: Any, login: str) -> dict[str, Any] | None:
     return None
 
 
-def _decodificar_claims_token(access_token: str) -> dict[str, Any]:
+def decodificar_claims_token(token: str) -> dict[str, Any]:
     """Decodifica o payload de um JWT sem validar a assinatura.
 
     Seguro neste contexto porque o token acabou de ser emitido pelo
     próprio Keycloak na mesma chamada (``kc_openid.token()``) — não é
     um token recebido de terceiros que precisaria de verificação.
-    Usado apenas para extrair ``realm_access``/``resource_access``
-    (roles), que o Keycloak inclui no access token via protocol
-    mappers configurados no client.
+    Usado tanto para extrair ``realm_access``/``resource_access``
+    (roles) do access token quanto o ``sub`` (user id) do refresh
+    token, quando não há outra forma de identificar o usuário na
+    operação em questão (ex.: encerramento de sessão, que só recebe
+    o refresh token).
 
     Args:
-        access_token: JWT retornado por ``KeycloakOpenID.token()``.
+        token: JWT retornado por ``KeycloakOpenID.token()`` (access
+            ou refresh token).
 
     Returns:
         Claims do token, ou ``{}`` se não for possível decodificar.
     """
     try:
-        payload = access_token.split(".")[1]
+        payload = token.split(".")[1]
         payload += "=" * (-len(payload) % 4)
         claims: dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload))
         return claims
@@ -280,7 +283,7 @@ def autenticar(login: str, senha: str) -> dict[str, Any]:
     nome = " ".join(
         filter(None, [conta.get("firstName"), conta.get("lastName")])
     )
-    claims = _decodificar_claims_token(token.get("access_token", ""))
+    claims = decodificar_claims_token(token.get("access_token", ""))
     return {
         "autenticado": True,
         "kc_user_id": str(conta.get("id", "")),
@@ -298,6 +301,46 @@ def autenticar(login: str, senha: str) -> dict[str, Any]:
         "refresh_token": token.get("refresh_token", ""),
         "expires_in": token.get("expires_in"),
     }
+
+
+def encerrar_sessao(refresh_token: str) -> dict[str, Any]:
+    """Invalida a sessão associada ao refresh token informado.
+
+    Equivale ao endpoint OIDC padrão do Keycloak
+    (``/protocol/openid-connect/logout``), chamado com o mesmo client
+    de login usado em ``autenticar`` — não um endpoint próprio deste
+    serviço, o Keycloak é quem de fato encerra a sessão e emite o
+    evento ``LOGOUT``.
+
+    Args:
+        refresh_token: Refresh token obtido no login, retornado por
+            ``autenticar``.
+
+    Returns:
+        Dict com ``encerrada`` (``True`` se o Keycloak confirmou o
+        encerramento; ``False`` se o token já estava inválido/
+        expirado — não é considerado erro, o resultado prático já é
+        o mesmo) e ``kc_user_id`` (extraído do próprio refresh token,
+        usado para o gatilho de auditoria; ``None`` se não for
+        possível decodificar).
+    """
+    from keycloak import KeycloakOpenID
+    from keycloak.exceptions import KeycloakPostError
+
+    kc_user_id = decodificar_claims_token(refresh_token).get("sub")
+
+    kc_openid = KeycloakOpenID(
+        server_url=settings.KEYCLOAK_URL_SERVIDOR,
+        client_id=settings.KEYCLOAK_LOGIN_CLIENT_ID,
+        client_secret_key=settings.KEYCLOAK_LOGIN_CLIENT_SECRET or None,
+        realm_name=settings.KEYCLOAK_REALM,
+        verify=settings.KEYCLOAK_VERIFICAR_SSL,
+    )
+    try:
+        kc_openid.logout(refresh_token)
+    except KeycloakPostError:
+        return {"encerrada": False, "kc_user_id": kc_user_id}
+    return {"encerrada": True, "kc_user_id": kc_user_id}
 
 
 def obter_dados_usuario(login: str) -> dict[str, Any] | None:
