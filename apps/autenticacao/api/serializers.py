@@ -25,6 +25,26 @@ class LoginRequestSerializer(serializers.Serializer):
     )
 
 
+class LogoutRequestSerializer(serializers.Serializer):
+    """Solicitação de encerramento de sessão.
+
+    O ``refresh_token`` é o mesmo devolvido por ``LoginResponseSerializer``
+    — o Gateway não mantém sessão própria, então encerrar a sessão
+    do usuário depende de repassar esse token ao Keycloak.
+    """
+
+    refresh_token = serializers.CharField(
+        write_only=True,
+        help_text="Refresh token obtido no login.",
+    )
+
+
+class LogoutResponseSerializer(serializers.Serializer):
+    """Confirmação do encerramento de sessão."""
+
+    situacao = serializers.CharField(default="sessao_encerrada")
+
+
 class PerfilSerializer(serializers.Serializer):
     """Perfil de acesso vinculado a um usuário em um sistema."""
 

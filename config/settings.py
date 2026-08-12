@@ -92,6 +92,19 @@ TOKEN_MS_TIMEOUT = float(os.getenv("TOKEN_MS_TIMEOUT", "10"))
 API_KEY_TOKEN_MS = os.getenv("API_KEY_TOKEN_MS", "")
 API_KEY_TOKEN_MS_HEADER = os.getenv("API_KEY_TOKEN_MS_HEADER", "X-API-Key")
 
+# Destino do gatilho de auditoria — só avisa atividade, não envia o
+# evento em si. Timeout curto: o disparo ocorre dentro de fluxos que
+# o usuário está esperando.
+AUDIT_MS_URL = os.getenv(
+    "AUDIT_MS_URL", ""
+)
+AUDIT_MS_TIMEOUT = float(os.getenv("AUDIT_MS_TIMEOUT", "2"))
+
+# API Key própria para a chamada de serviço Gateway → Audit-MS —
+# distinta da API_KEY que os clientes usam para chamar o Gateway.
+API_KEY_AUDIT_MS = os.getenv("API_KEY_AUDIT_MS", "")
+API_KEY_AUDIT_MS_HEADER = os.getenv("API_KEY_AUDIT_MS_HEADER", "X-API-Key")
+
 # Keycloak Admin API — usado nas rotas de gestão de senha/e-mail
 # (recuperação de senha, alteração de senha, alteração de e-mail) e
 # para resolver a conta do usuário (login/dados). Mesmas variáveis de

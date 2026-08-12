@@ -12,7 +12,7 @@ from apps.autenticacao import keycloak_admin
 def _access_token_fake(claims: dict) -> str:
     """Monta um JWT sintético (header.payload.signature) para teste.
 
-    A assinatura não é válida — ``_decodificar_claims_token`` não a
+    A assinatura não é válida — ``decodificar_claims_token`` não a
     verifica, só decodifica o payload.
     """
     header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=")
@@ -147,7 +147,7 @@ class TestRedefinirSenha:
 
 
 class TestDecodificarClaimsToken:
-    """Testes de _decodificar_claims_token."""
+    """Testes de decodificar_claims_token."""
 
     def test_decodifica_claims_de_um_jwt_valido(self) -> None:
         """Deve extrair os claims do payload do token."""
@@ -155,14 +155,14 @@ class TestDecodificarClaimsToken:
             {"realm_access": {"roles": ["default-roles-cotic"]}}
         )
 
-        claims = keycloak_admin._decodificar_claims_token(token)
+        claims = keycloak_admin.decodificar_claims_token(token)
 
         assert claims == {"realm_access": {"roles": ["default-roles-cotic"]}}
 
     def test_retorna_vazio_para_token_malformado(self) -> None:
         """Deve retornar {} sem lançar exceção para entrada inválida."""
-        assert keycloak_admin._decodificar_claims_token("nao-e-um-jwt") == {}
-        assert keycloak_admin._decodificar_claims_token("") == {}
+        assert keycloak_admin.decodificar_claims_token("nao-e-um-jwt") == {}
+        assert keycloak_admin.decodificar_claims_token("") == {}
 
 
 class TestBuscarUsuarioPorLogin:
@@ -303,6 +303,49 @@ class TestAutenticar:
 
         assert resultado["autenticado"] is False
         assert "invalid_grant" in resultado["erro"]
+
+
+class TestEncerrarSessao:
+    """Testes de encerrar_sessao."""
+
+    def test_encerra_sessao_com_sucesso(self) -> None:
+        """Deve confirmar o encerramento e extrair o kc_user_id."""
+        refresh_token = _access_token_fake({"sub": _CONTA_KC["id"]})
+
+        mock_kc_openid = MagicMock()
+        with patch("keycloak.KeycloakOpenID", return_value=mock_kc_openid):
+            resultado = keycloak_admin.encerrar_sessao(refresh_token)
+
+        assert resultado == {
+            "encerrada": True,
+            "kc_user_id": _CONTA_KC["id"],
+        }
+        mock_kc_openid.logout.assert_called_once_with(refresh_token)
+
+    def test_token_ja_invalido_nao_e_erro(self) -> None:
+        """Deve retornar encerrada=False sem lançar exceção."""
+        from keycloak.exceptions import KeycloakPostError
+
+        refresh_token = _access_token_fake({"sub": _CONTA_KC["id"]})
+
+        mock_kc_openid = MagicMock()
+        mock_kc_openid.logout.side_effect = KeycloakPostError("token expirado")
+        with patch("keycloak.KeycloakOpenID", return_value=mock_kc_openid):
+            resultado = keycloak_admin.encerrar_sessao(refresh_token)
+
+        assert resultado == {
+            "encerrada": False,
+            "kc_user_id": _CONTA_KC["id"],
+        }
+
+    def test_refresh_token_malformado_retorna_kc_user_id_none(self) -> None:
+        """Deve seguir com o encerramento mesmo sem extrair o sub."""
+        mock_kc_openid = MagicMock()
+        with patch("keycloak.KeycloakOpenID", return_value=mock_kc_openid):
+            resultado = keycloak_admin.encerrar_sessao("nao-e-um-jwt")
+
+        assert resultado["kc_user_id"] is None
+        mock_kc_openid.logout.assert_called_once_with("nao-e-um-jwt")
 
 
 class TestObterDadosUsuario:

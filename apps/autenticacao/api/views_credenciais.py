@@ -25,6 +25,7 @@ from apps.autenticacao.api.serializers import (
     RecuperarSenhaRequestSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
+from apps.autenticacao.gatilho_auditoria import disparar_gatilho_por_login
 
 _ERRO_KEYCLOAK = {"erro": "falha ao comunicar com o keycloak"}
 
@@ -109,6 +110,8 @@ class AlterarSenhaView(APIView):
         except KeycloakError:
             return Response(_ERRO_KEYCLOAK, status=502)
 
+        disparar_gatilho_por_login(entrada.validated_data["login"])
+
         saida = OperacaoConfirmadaResponseSerializer(
             {"situacao": "senha_alterada"}
         )
@@ -157,6 +160,8 @@ class AlterarEmailView(APIView):
             return Response(status=204)
         except KeycloakError:
             return Response(_ERRO_KEYCLOAK, status=502)
+
+        disparar_gatilho_por_login(entrada.validated_data["login"])
 
         saida = AlterarEmailResponseSerializer(
             {

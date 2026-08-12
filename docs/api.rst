@@ -20,6 +20,9 @@ Core
 .. automodule:: apps.core.clientes.token_ms
    :members:
 
+.. automodule:: apps.core.clientes.audit_ms
+   :members:
+
 .. automodule:: apps.core.http
    :members:
 
@@ -30,6 +33,9 @@ Autenticação
    :members:
 
 .. automodule:: apps.autenticacao.keycloak_admin
+   :members:
+
+.. automodule:: apps.autenticacao.gatilho_auditoria
    :members:
 
 .. automodule:: apps.autenticacao.token_enriquecido
