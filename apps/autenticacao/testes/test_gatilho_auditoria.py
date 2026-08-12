@@ -32,7 +32,7 @@ def _resposta(status_code: int) -> httpx.Response:
     """Resposta simulada do endpoint de gatilho."""
     return httpx.Response(
         status_code,
-        request=httpx.Request("POST", "http://audit-ms/api/v1/gatilho-poll/"),
+        request=httpx.Request("POST", "https://audit-ms/api/v1/gatilho-poll/"),
     )
 
 

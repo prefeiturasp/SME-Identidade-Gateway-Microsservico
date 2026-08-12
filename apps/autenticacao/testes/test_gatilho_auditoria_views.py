@@ -112,7 +112,7 @@ class TestResilienciaAoGatilhoDeAuditoria:
         cliente_audit.__enter__.return_value = cliente_audit
         cliente_audit.post.return_value = httpx.Response(
             202,
-            request=httpx.Request("POST", "http://audit-ms/"),
+            request=httpx.Request("POST", "https://audit-ms/"),
         )
 
         with (
