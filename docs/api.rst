@@ -38,9 +38,6 @@ Autenticação
 .. automodule:: apps.autenticacao.gatilho_auditoria
    :members:
 
-.. automodule:: apps.autenticacao.token_enriquecido
-   :members:
-
 .. automodule:: apps.autenticacao.api.views
    :members:
 
