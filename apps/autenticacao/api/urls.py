@@ -6,6 +6,7 @@ from apps.autenticacao.api.views import (
     DadosAcessoView,
     DadosUsuarioView,
     LoginView,
+    LogoutView,
     PerfisPorLoginView,
 )
 from apps.autenticacao.api.views_credenciais import (
@@ -18,6 +19,7 @@ from apps.autenticacao.api.views_credenciais import (
 # devolver a rota "recuperar-senha/" e o import correspondente.
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
     path(
         "usuarios/<str:login>/dados/",
         DadosUsuarioView.as_view(),
