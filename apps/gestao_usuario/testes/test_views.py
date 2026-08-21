@@ -47,7 +47,25 @@ class TestGestaoUsuarioEndpoints:
         with patch(_CLIENTE_ETL) as mock_cliente_etl:
             response = APIClient().post(
                 reverse("usuario-criar"),
-                data={"nome": "Teste"},
+                data={"nome": "Teste", "email": "teste@externo.com"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_cliente_etl.assert_not_called()
+
+    def test_criar_usuario_sem_email_retorna_400(self) -> None:
+        """Deve rejeitar payload sem email, sem chamar o ETL.
+
+        Sem e-mail, o Keycloak dispara a required action de perfil
+        incompleto no primeiro login e o usuário não consegue
+        autenticar via password grant.
+        """
+        with patch(_CLIENTE_ETL) as mock_cliente_etl:
+            response = APIClient().post(
+                reverse("usuario-criar"),
+                data={"nome": "Teste", "cpf": "12345678900"},
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
@@ -67,7 +85,11 @@ class TestGestaoUsuarioEndpoints:
         ) as mock_cliente_etl:
             response = APIClient().post(
                 reverse("usuario-criar"),
-                data={"nome": "Fulano", "cpf": "12345678900"},
+                data={
+                    "nome": "Fulano",
+                    "cpf": "12345678900",
+                    "email": "fulano@externo.com",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
@@ -99,6 +121,7 @@ class TestGestaoUsuarioEndpoints:
                 data={
                     "nome": "Fulano",
                     "cpf": "12345678900",
+                    "email": "fulano@externo.com",
                     "sistema": 0,
                     "roles": ["string"],
                 },
@@ -121,6 +144,7 @@ class TestGestaoUsuarioEndpoints:
                 data={
                     "nome": "Fulano",
                     "cpf": "12345678900",
+                    "email": "fulano@externo.com",
                     "roles": ["string"],
                 },
                 format="json",
@@ -138,6 +162,7 @@ class TestGestaoUsuarioEndpoints:
                 data={
                     "nome": "Fulano",
                     "cpf": "12345678900",
+                    "email": "fulano@externo.com",
                     "sistema": 0,
                 },
                 format="json",
@@ -156,7 +181,11 @@ class TestGestaoUsuarioEndpoints:
         with patch(_CLIENTE_ETL, return_value=cliente):
             response = APIClient().post(
                 reverse("usuario-criar"),
-                data={"nome": "Fulano", "cpf": "12345678900"},
+                data={
+                    "nome": "Fulano",
+                    "cpf": "12345678900",
+                    "email": "fulano@externo.com",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
@@ -172,7 +201,11 @@ class TestGestaoUsuarioEndpoints:
         with patch(_CLIENTE_ETL, return_value=cliente):
             response = APIClient().post(
                 reverse("usuario-criar"),
-                data={"nome": "Fulano", "cpf": "12345678900"},
+                data={
+                    "nome": "Fulano",
+                    "cpf": "12345678900",
+                    "email": "fulano@externo.com",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
@@ -189,7 +222,11 @@ class TestGestaoUsuarioEndpoints:
         with patch(_CLIENTE_ETL, return_value=_mock_cliente(resposta_etl)):
             response = APIClient().post(
                 reverse("usuario-criar"),
-                data={"nome": "Fulano", "cpf": "12345678900"},
+                data={
+                    "nome": "Fulano",
+                    "cpf": "12345678900",
+                    "email": "fulano@externo.com",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
