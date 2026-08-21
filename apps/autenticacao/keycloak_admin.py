@@ -165,6 +165,13 @@ def redefinir_senha(login: str, nova_senha: str) -> None:
     login, pois quem está definindo a senha aqui é uma ação
     administrativa explícita, não um esquecimento do usuário.
 
+    ``set_user_password`` só troca a senha — não remove uma
+    ``UPDATE_PASSWORD`` já presente em ``requiredActions`` do usuário
+    (ex.: usuário criado pelo ETL com senha inicial temporária). Sem
+    limpar essa lista, o password grant do Gateway continua recusado
+    com ``invalid_grant: Account is not fully set up`` mesmo após a
+    senha definitiva ser aplicada.
+
     Args:
         login: RF, CPF ou username do usuário no Keycloak.
         nova_senha: Nova senha a ser definida.
@@ -177,6 +184,7 @@ def redefinir_senha(login: str, nova_senha: str) -> None:
     admin.set_user_password(
         user_id=user_id, password=nova_senha, temporary=False
     )
+    admin.update_user(user_id=user_id, payload={"requiredActions": []})
 
 
 def buscar_usuario_por_login(admin: Any, login: str) -> dict[str, Any] | None:
