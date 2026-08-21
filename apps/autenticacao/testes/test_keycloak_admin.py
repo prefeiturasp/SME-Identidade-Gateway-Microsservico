@@ -145,6 +145,27 @@ class TestRedefinirSenha:
             temporary=False,
         )
 
+    @patch("apps.autenticacao.keycloak_admin.obter_admin_keycloak")
+    def test_deve_limpar_required_actions_pendentes(
+        self, mock_obter_admin: MagicMock
+    ) -> None:
+        """Deve remover UPDATE_PASSWORD herdada de senha temporária.
+
+        Sem isso, o password grant continua recusado com
+        ``Account is not fully set up`` mesmo após a senha
+        definitiva ser aplicada.
+        """
+        admin = MagicMock()
+        admin.get_users.return_value = [_CONTA_KC]
+        mock_obter_admin.return_value = admin
+
+        keycloak_admin.redefinir_senha("1234567", "senha123")
+
+        admin.update_user.assert_called_once_with(
+            user_id=_CONTA_KC["id"],
+            payload={"requiredActions": []},
+        )
+
 
 class TestDecodificarClaimsToken:
     """Testes de decodificar_claims_token."""

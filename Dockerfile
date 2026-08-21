@@ -37,12 +37,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /install /usr/local
 COPY apps /app/apps
 COPY config /app/config
+COPY scripts /app/scripts
 COPY manage.py /app/
 
-RUN chown -R app:app /app
+RUN chmod +x /app/scripts/entrypoint.sh \
+    && chown -R app:app /app
 
 USER app
 
 EXPOSE 8000
 
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60"]
