@@ -37,6 +37,8 @@ from apps.autenticacao.api.serializers import (
     LogoutRequestSerializer,
     LogoutResponseSerializer,
     PerfisPorLoginResponseSerializer,
+    ValidarTokenRequestSerializer,
+    ValidarTokenResponseSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
 from apps.autenticacao.gatilho_auditoria import disparar_gatilho
@@ -375,3 +377,46 @@ class DadosAcessoView(APIView):
             }
         )
         return Response(saida.data)
+
+
+class ValidarTokenView(APIView):
+    """Valida um token enriquecido, sem exigir decodificação no cliente.
+
+    O Gateway é quem devolve o ``token_enriquecido`` no login — faz
+    sentido também ser o ponto de entrada para validá-lo depois,
+    sem o consumidor precisar saber que quem assina de fato é o
+    Token-MS nem chamá-lo diretamente.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=ValidarTokenRequestSerializer,
+        responses=ValidarTokenResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Repassa o token ao Token-MS e devolve o resultado da validação.
+
+        Args:
+            request: Requisição HTTP com ``token``.
+
+        Returns:
+            ``{"valido", "expirado", "claims"}`` — mesmo contrato do
+            Token-MS, repassado sem transformação.
+        """
+        entrada = ValidarTokenRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        try:
+            with cliente_token_ms() as cliente:
+                resposta = cliente.post(
+                    "/api/v1/token/validar/",
+                    json=entrada.validated_data,
+                )
+        except httpx.TimeoutException:
+            return Response({"erro": "token-ms timeout"}, status=504)
+        except httpx.TransportError:
+            return Response(_TOKEN_MS_INDISPONIVEL, status=502)
+
+        return resposta_do_servico(resposta)

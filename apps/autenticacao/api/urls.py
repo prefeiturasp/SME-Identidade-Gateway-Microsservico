@@ -8,6 +8,7 @@ from apps.autenticacao.api.views import (
     LoginView,
     LogoutView,
     PerfisPorLoginView,
+    ValidarTokenView,
 )
 from apps.autenticacao.api.views_credenciais import (
     AlterarEmailView,
@@ -20,6 +21,11 @@ from apps.autenticacao.api.views_credenciais import (
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
+    path(
+        "validar-token/",
+        ValidarTokenView.as_view(),
+        name="validar-token",
+    ),
     path(
         "usuarios/<str:login>/dados/",
         DadosUsuarioView.as_view(),
