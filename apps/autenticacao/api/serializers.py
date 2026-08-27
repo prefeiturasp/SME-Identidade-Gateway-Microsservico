@@ -146,6 +146,37 @@ class DadosAcessoResponseSerializer(serializers.Serializer):
     permissoes = ModuloPermissaoSerializer(many=True)
 
 
+class ValidarTokenRequestSerializer(serializers.Serializer):
+    """Token enriquecido a ser validado.
+
+    Repassado como está para o Token-MS, que é quem assina o token e
+    detém a chave necessária para validar a assinatura.
+    """
+
+    token = serializers.CharField(
+        help_text="Token enriquecido (``token_enriquecido`` do login)."
+    )
+
+
+class ValidarTokenResponseSerializer(serializers.Serializer):
+    """Resultado da validação de um token enriquecido.
+
+    Equivale ao retorno de
+    ``POST /identidade-token/api/v1/token/validar/`` no Token-MS —
+    este endpoint só repassa a chamada, sem transformar o resultado.
+    """
+
+    valido = serializers.BooleanField()
+    expirado = serializers.BooleanField()
+    claims = serializers.DictField(
+        required=False,
+        help_text=(
+            "Claims decodificadas do token, incluindo vinculos/perfis/"
+            "permissoes — presente apenas quando ``valido`` é ``true``."
+        ),
+    )
+
+
 class DadosUsuarioResponseSerializer(serializers.Serializer):
     """Dados cadastrais de um usuário, consultados direto no Keycloak.
 

@@ -835,3 +835,142 @@ class TestAutenticacaoEndpoints:
             )
 
         assert response.status_code == 500
+
+
+def _resposta_validar_token(
+    corpo: dict,
+    status_code: int = 200,
+) -> httpx.Response:
+    """Resposta simulada do endpoint de validação de token."""
+    return httpx.Response(
+        status_code,
+        json=corpo,
+        request=httpx.Request(
+            "POST",
+            "http://token-ms/api/v1/token/validar/",
+        ),
+    )
+
+
+class TestValidarTokenView:
+    """Testes da view ValidarTokenView (proxy para o Token-MS)."""
+
+    @pytest.fixture(autouse=True)
+    def _configura_api_key(self, settings: Any) -> None:
+        """Configura autenticação dos testes."""
+        settings.API_KEY = "chave-secreta"
+        settings.API_KEY_HEADER = "X-API-Key"
+
+    def test_validar_token_valido_repassa_claims(self) -> None:
+        """Deve repassar valido/expirado/claims do Token-MS."""
+        claims = {
+            "sub": _CONTA_KEYCLOAK["kc_user_id"],
+            "rf": _CONTA_KEYCLOAK["rf"],
+            "vinculos": [{"tipo_vinculo": "cargo_base"}],
+            "perfis": [],
+            "permissoes": [],
+        }
+        resposta = _resposta_validar_token(
+            {"valido": True, "expirado": False, "claims": claims}
+        )
+
+        with patch(
+            _CLIENTE_TOKEN_MS,
+            return_value=_mock_cliente(resposta),
+        ) as mock_cliente_token_ms:
+            response = APIClient().post(
+                reverse("validar-token"),
+                {"token": "jwt-enriquecido"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 200
+        corpo = response.json()
+        assert corpo["valido"] is True
+        assert corpo["claims"]["vinculos"] == [{"tipo_vinculo": "cargo_base"}]
+
+        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
+        cliente.post.assert_called_once_with(
+            "/api/v1/token/validar/",
+            json={"token": "jwt-enriquecido"},
+        )
+
+    def test_validar_token_expirado(self) -> None:
+        """Token expirado não deve trazer claims."""
+        resposta = _resposta_validar_token(
+            {"valido": False, "expirado": True},
+            status_code=401,
+        )
+
+        with patch(
+            _CLIENTE_TOKEN_MS,
+            return_value=_mock_cliente(resposta),
+        ):
+            response = APIClient().post(
+                reverse("validar-token"),
+                {"token": "jwt-expirado"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 401
+        corpo = response.json()
+        assert corpo["valido"] is False
+        assert corpo["expirado"] is True
+        assert "claims" not in corpo
+
+    def test_validar_token_sem_token_retorna_400(self) -> None:
+        """Payload sem `token` não deve chamar o Token-MS."""
+        with patch(_CLIENTE_TOKEN_MS) as mock_cliente_token_ms:
+            response = APIClient().post(
+                reverse("validar-token"),
+                {},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 400
+        mock_cliente_token_ms.assert_not_called()
+
+    def test_validar_token_com_timeout_retorna_504(self) -> None:
+        """Timeout ao validar retorna 504."""
+        cliente = MagicMock()
+        cliente.__enter__.return_value = cliente
+        cliente.post.side_effect = httpx.TimeoutException("timeout")
+
+        with patch(_CLIENTE_TOKEN_MS, return_value=cliente):
+            response = APIClient().post(
+                reverse("validar-token"),
+                {"token": "jwt-enriquecido"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 504
+
+    def test_validar_token_ms_indisponivel_retorna_502(self) -> None:
+        """Falha de conexão retorna 502."""
+        cliente = MagicMock()
+        cliente.__enter__.return_value = cliente
+        cliente.post.side_effect = httpx.TransportError("falha conexão")
+
+        with patch(_CLIENTE_TOKEN_MS, return_value=cliente):
+            response = APIClient().post(
+                reverse("validar-token"),
+                {"token": "jwt-enriquecido"},
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == 502
+
+    def test_validar_token_sem_api_key_retorna_401(self) -> None:
+        """Deve exigir API Key, mesmo padrão das demais rotas."""
+        response = APIClient().post(
+            reverse("validar-token"),
+            {"token": "jwt-enriquecido"},
+            format="json",
+        )
+
+        assert response.status_code == 401
