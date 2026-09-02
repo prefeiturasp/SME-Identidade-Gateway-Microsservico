@@ -9,7 +9,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.api.serializers import HealthStatusSerializer
-from apps.core.clientes.token_ms import cliente_token_ms
+from apps.core.api_clients import get_api_client
+
+_client = get_api_client("token")
 
 
 class HealthCheckView(APIView):
@@ -35,10 +37,9 @@ class HealthCheckView(APIView):
         """
         situacao_token_ms = "healthy"
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.get("/api/v1/health/", timeout=2)
-                if resposta.status_code != 200:
-                    situacao_token_ms = "degraded"
+            resposta = _client.get("/api/v1/health/")
+            if resposta.status_code != 200:
+                situacao_token_ms = "degraded"
         except httpx.HTTPError:
             situacao_token_ms = "unhealthy"
 
