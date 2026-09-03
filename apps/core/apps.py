@@ -8,3 +8,15 @@ class CoreConfig(AppConfig):
 
     name = "apps.core"
     label = "core"
+
+    def ready(self) -> None:
+        """Inicializa os recursos compartilhados da SDK."""
+        from sme_sidecar_sdk import runtime
+        from sme_sidecar_sdk.config import Settings
+
+        runtime.configure(
+            Settings(
+                service_name="gateway-auth-ms",
+                service_version="0.0.1",
+            )
+        )

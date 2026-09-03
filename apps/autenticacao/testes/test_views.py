@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 _KEYCLOAK_ADMIN = "apps.autenticacao.api.views.keycloak_admin"
-_CLIENTE_TOKEN_MS = "apps.autenticacao.api.views.cliente_token_ms"
+_TOKEN_MS_CLIENT = "apps.autenticacao.api.views._client"
 
 
 _CONTA_KEYCLOAK = {
@@ -58,8 +58,6 @@ def _mock_cliente(
 ) -> MagicMock:
     """Mock do cliente HTTP do Token-MS."""
     cliente = MagicMock()
-
-    cliente.__enter__.return_value = cliente
 
     cliente.get.return_value = resposta
     cliente.post.return_value = resposta
@@ -114,7 +112,6 @@ class TestAutenticacaoEndpoints:
         """Configura autenticação dos testes."""
         settings.API_KEY = "chave-secreta"
         settings.API_KEY_HEADER = "X-API-Key"
-
         settings.JWT_ENRIQUECIDO_ALGORITMO = "RS256"
 
     def test_login_sem_api_key_retorna_401(self) -> None:
@@ -128,7 +125,7 @@ class TestAutenticacaoEndpoints:
             format="json",
         )
 
-        assert response.status_code == (status.HTTP_401_UNAUTHORIZED)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_login_com_api_key_invalida_retorna_401(
         self,
@@ -144,7 +141,7 @@ class TestAutenticacaoEndpoints:
             HTTP_X_API_KEY="errada",
         )
 
-        assert response.status_code == (status.HTTP_401_UNAUTHORIZED)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_login_com_sucesso_retorna_token_enriquecido(
         self,
@@ -153,7 +150,11 @@ class TestAutenticacaoEndpoints:
         resultado = {
             "autenticado": True,
             **_CONTA_KEYCLOAK,
-            "roles": {"realm_access": {"roles": ["default-roles-cotic"]}},
+            "roles": {
+                "realm_access": {
+                    "roles": ["default-roles-cotic"],
+                }
+            },
             "access_token": "token-jwt",
             "refresh_token": "refresh-jwt",
             "expires_in": 300,
@@ -162,18 +163,17 @@ class TestAutenticacaoEndpoints:
         resposta_token = _resposta_token_enriquecido(
             {
                 "token": "jwt-enriquecido",
-                "data_expiracao": ("2026-07-24T20:00:00Z"),
+                "data_expiracao": "2026-07-24T20:00:00Z",
             }
         )
 
+        cliente = _mock_cliente(resposta_token)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta_token),
-            ) as mock_cliente_token_ms,
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
-            mock_keycloak_admin.autenticar.return_value = resultado
+            mock_keycloak_admin.autenticar.return_value = resultado.copy()
 
             response = APIClient().post(
                 reverse("login"),
@@ -185,16 +185,13 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
+        assert response.status_code == status.HTTP_200_OK
 
         corpo = response.json()
 
-        assert corpo["kc_user_id"] == (_CONTA_KEYCLOAK["kc_user_id"])
-
+        assert corpo["kc_user_id"] == _CONTA_KEYCLOAK["kc_user_id"]
         assert corpo["access_token"] == "token-jwt"
-
-        assert corpo["token_enriquecido"] == ("jwt-enriquecido")
-
+        assert corpo["token_enriquecido"] == "jwt-enriquecido"
         assert corpo["data_expiracao_token_enriquecido"] is not None
 
         mock_keycloak_admin.autenticar.assert_called_once_with(
@@ -202,9 +199,13 @@ class TestAutenticacaoEndpoints:
             "x",
         )
 
-        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
-
-        cliente.post.assert_called_once()
+        cliente.post.assert_called_once_with(
+            ("/api/v1/token/enriquecido/" f"{_CONTA_KEYCLOAK['kc_user_id']}/"),
+            payload={
+                **resultado,
+                "perfil": None,
+            },
+        )
 
     def test_login_com_token_ms_indisponivel_nao_falha(
         self,
@@ -220,19 +221,13 @@ class TestAutenticacaoEndpoints:
         }
 
         cliente = MagicMock()
-
-        cliente.__enter__.return_value = cliente
-
         cliente.post.side_effect = httpx.ConnectError("recusado")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=cliente,
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
-            mock_keycloak_admin.autenticar.return_value = resultado
+            mock_keycloak_admin.autenticar.return_value = resultado.copy()
 
             response = APIClient().post(
                 reverse("login"),
@@ -244,13 +239,14 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
+        assert response.status_code == status.HTTP_200_OK
 
         corpo = response.json()
 
         assert corpo["token_enriquecido"] is None
-
         assert corpo["data_expiracao_token_enriquecido"] is None
+
+        cliente.post.assert_called_once()
 
     def test_login_com_token_ms_erro_nao_falha(
         self,
@@ -270,14 +266,13 @@ class TestAutenticacaoEndpoints:
             status_code=500,
         )
 
+        cliente = _mock_cliente(resposta)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta),
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
-            mock_keycloak_admin.autenticar.return_value = resultado
+            mock_keycloak_admin.autenticar.return_value = resultado.copy()
 
             response = APIClient().post(
                 reverse("login"),
@@ -289,7 +284,7 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
+        assert response.status_code == status.HTTP_200_OK
 
         corpo = response.json()
 
@@ -315,7 +310,7 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 401
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_login_usuario_nao_encontrado_retorna_204(
         self,
@@ -337,7 +332,7 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 204
+        assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not response.content
 
     def test_logout_sem_api_key_retorna_401(self) -> None:
@@ -377,12 +372,17 @@ class TestAutenticacaoEndpoints:
             )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == {"situacao": "sessao_encerrada"}
+        assert response.json() == {
+            "situacao": "sessao_encerrada",
+        }
+
         mock_keycloak_admin.encerrar_sessao.assert_called_once_with(
             "refresh-valido"
         )
 
-    def test_logout_com_token_ja_invalido_nao_falha(self) -> None:
+    def test_logout_com_token_ja_invalido_nao_falha(
+        self,
+    ) -> None:
         """Deve responder normalmente mesmo com token já expirado.
 
         O resultado prático (sessão encerrada) já é o mesmo, então a
@@ -420,9 +420,8 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
-
-        assert response.json()["rf"] == ("1234567")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["rf"] == "1234567"
 
     def test_dados_usuario_nao_encontrado_retorna_204(
         self,
@@ -439,7 +438,7 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 204
+        assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not response.content
 
     def test_perfis_por_login_retorna_projecao_real_do_token_ms(
@@ -448,12 +447,11 @@ class TestAutenticacaoEndpoints:
         """Deve retornar perfis vindos do Token-MS."""
         resposta_token_ms = _resposta_perfis_token_ms(_PROJECAO_TOKEN_MS)
 
+        cliente = _mock_cliente(resposta_token_ms)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta_token_ms),
-            ) as mock_cliente_token_ms,
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -467,27 +465,26 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
+        assert response.status_code == status.HTTP_200_OK
 
         corpo = response.json()
 
         assert corpo["rf"] == "1234567"
-
-        assert corpo["perfis"][0]["nome"] == ("professor")
-
-        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
+        assert corpo["perfis"][0]["nome"] == "professor"
 
         cliente.get.assert_called_once_with(
-            "/api/v1/perfis/" f"{_CONTA_KEYCLOAK['kc_user_id']}/"
+            f"/api/v1/perfis/{_CONTA_KEYCLOAK['kc_user_id']}/"
         )
 
     def test_perfis_por_login_sem_conta_keycloak_retorna_204(
         self,
     ) -> None:
         """Não deve chamar Token-MS sem usuário."""
+        cliente = MagicMock()
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(_CLIENTE_TOKEN_MS) as mock_cliente_token_ms,
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = None
 
@@ -499,25 +496,26 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 204
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
-        mock_cliente_token_ms.assert_not_called()
+        cliente.get.assert_not_called()
 
     def test_perfis_por_login_sem_projecao_retorna_204(
         self,
     ) -> None:
         """Deve retornar 204 quando não existir projeção."""
         resposta = _resposta_perfis_token_ms(
-            {"detail": ("Projeção de usuário não encontrada.")},
+            {
+                "detail": "Projeção de usuário não encontrada.",
+            },
             status_code=404,
         )
 
+        cliente = _mock_cliente(resposta)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta),
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -531,24 +529,18 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 204
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
     def test_perfis_por_login_com_timeout_retorna_504(
         self,
     ) -> None:
         """Timeout do Token-MS retorna 504."""
         cliente = MagicMock()
-
-        cliente.__enter__.return_value = cliente
-
         cliente.get.side_effect = httpx.TimeoutException("timeout")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=cliente,
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -562,24 +554,18 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 504
+        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT
 
     def test_perfis_por_login_token_ms_indisponivel_retorna_502(
         self,
     ) -> None:
         """Erro de transporte retorna 502."""
         cliente = MagicMock()
-
-        cliente.__enter__.return_value = cliente
-
         cliente.get.side_effect = httpx.TransportError("falha conexão")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=cliente,
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -593,7 +579,7 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 502
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
     def test_dados_acesso_retorna_token_e_permissoes(
         self,
@@ -602,17 +588,16 @@ class TestAutenticacaoEndpoints:
         resposta = _resposta_token_enriquecido(
             {
                 "token": "jwt-enriquecido",
-                "data_expiracao": ("2026-07-24T20:00:00Z"),
+                "data_expiracao": "2026-07-24T20:00:00Z",
                 "permissoes": _PERMISSOES,
             }
         )
 
+        cliente = _mock_cliente(resposta)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta),
-            ) as mock_cliente_token_ms,
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -629,19 +614,16 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
+        assert response.status_code == status.HTTP_200_OK
 
         corpo = response.json()
 
-        assert corpo["token"] == ("jwt-enriquecido")
-
+        assert corpo["token"] == "jwt-enriquecido"
         assert corpo["permissoes"][0]["sistema_nome"] == "CoreSSO"
-
-        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
 
         cliente.post.assert_called_once_with(
             ("/api/v1/token/enriquecido/" f"{_CONTA_KEYCLOAK['kc_user_id']}/"),
-            json={
+            payload={
                 **_CONTA_KEYCLOAK,
                 "perfil": "professor",
             },
@@ -651,9 +633,11 @@ class TestAutenticacaoEndpoints:
         self,
     ) -> None:
         """Não deve chamar Token-MS sem usuário."""
+        cliente = MagicMock()
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(_CLIENTE_TOKEN_MS) as mock_cliente_token_ms,
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = None
 
@@ -668,25 +652,26 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 204
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
-        mock_cliente_token_ms.assert_not_called()
+        cliente.post.assert_not_called()
 
     def test_dados_acesso_sem_projecao_retorna_204(
         self,
     ) -> None:
         """Token-MS sem usuário retorna 204."""
         resposta = _resposta_token_enriquecido(
-            {"detail": ("Projeção não encontrada")},
+            {
+                "detail": "Projeção não encontrada",
+            },
             status_code=404,
         )
 
+        cliente = _mock_cliente(resposta)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta),
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -703,24 +688,18 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 204
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
     def test_dados_acesso_com_timeout_retorna_504(
         self,
     ) -> None:
         """Timeout ao gerar token retorna 504."""
         cliente = MagicMock()
-
-        cliente.__enter__.return_value = cliente
-
         cliente.post.side_effect = httpx.TimeoutException("timeout")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=cliente,
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -737,24 +716,18 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 504
+        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT
 
     def test_dados_acesso_token_ms_indisponivel_retorna_502(
         self,
     ) -> None:
         """Falha de conexão retorna 502."""
         cliente = MagicMock()
-
-        cliente.__enter__.return_value = cliente
-
         cliente.post.side_effect = httpx.TransportError("falha conexão")
 
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=cliente,
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -771,23 +744,24 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 502
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
     def test_perfis_por_login_com_erro_generico_token_ms_retorna_erro(
         self,
     ) -> None:
         """Deve repassar erro do Token-MS."""
         resposta = _resposta_perfis_token_ms(
-            {"erro": "erro interno"},
+            {
+                "erro": "erro interno",
+            },
             status_code=500,
         )
 
+        cliente = _mock_cliente(resposta)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta),
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -801,23 +775,24 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 500
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     def test_dados_acesso_com_erro_generico_token_ms_retorna_erro(
         self,
     ) -> None:
         """Deve repassar erro do Token-MS."""
         resposta = _resposta_token_enriquecido(
-            {"erro": "erro interno"},
+            {
+                "erro": "erro interno",
+            },
             status_code=500,
         )
 
+        cliente = _mock_cliente(resposta)
+
         with (
             patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
-            patch(
-                _CLIENTE_TOKEN_MS,
-                return_value=_mock_cliente(resposta),
-            ),
+            patch(_TOKEN_MS_CLIENT, cliente),
         ):
             mock_keycloak_admin.obter_dados_usuario.return_value = (
                 _CONTA_KEYCLOAK
@@ -834,7 +809,7 @@ class TestAutenticacaoEndpoints:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 500
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 def _resposta_validar_token(
@@ -856,73 +831,105 @@ class TestValidarTokenView:
     """Testes da view ValidarTokenView (proxy para o Token-MS)."""
 
     @pytest.fixture(autouse=True)
-    def _configura_api_key(self, settings: Any) -> None:
+    def _configura_api_key(
+        self,
+        settings: Any,
+    ) -> None:
         """Configura autenticação dos testes."""
         settings.API_KEY = "chave-secreta"
         settings.API_KEY_HEADER = "X-API-Key"
 
-    def test_validar_token_valido_repassa_claims(self) -> None:
+    def test_validar_token_valido_repassa_claims(
+        self,
+    ) -> None:
         """Deve repassar valido/expirado/claims do Token-MS."""
         claims = {
             "sub": _CONTA_KEYCLOAK["kc_user_id"],
             "rf": _CONTA_KEYCLOAK["rf"],
-            "vinculos": [{"tipo_vinculo": "cargo_base"}],
+            "vinculos": [
+                {
+                    "tipo_vinculo": "cargo_base",
+                }
+            ],
             "perfis": [],
             "permissoes": [],
         }
+
         resposta = _resposta_validar_token(
-            {"valido": True, "expirado": False, "claims": claims}
+            {
+                "valido": True,
+                "expirado": False,
+                "claims": claims,
+            }
         )
 
-        with patch(
-            _CLIENTE_TOKEN_MS,
-            return_value=_mock_cliente(resposta),
-        ) as mock_cliente_token_ms:
+        cliente = _mock_cliente(resposta)
+
+        with patch(_TOKEN_MS_CLIENT, cliente):
             response = APIClient().post(
                 reverse("validar-token"),
-                {"token": "jwt-enriquecido"},
+                {
+                    "token": "jwt-enriquecido",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 200
-        corpo = response.json()
-        assert corpo["valido"] is True
-        assert corpo["claims"]["vinculos"] == [{"tipo_vinculo": "cargo_base"}]
+        assert response.status_code == status.HTTP_200_OK
 
-        cliente = mock_cliente_token_ms.return_value.__enter__.return_value
+        corpo = response.json()
+
+        assert corpo["valido"] is True
+        assert corpo["claims"]["vinculos"] == [
+            {
+                "tipo_vinculo": "cargo_base",
+            }
+        ]
+
         cliente.post.assert_called_once_with(
             "/api/v1/token/validar/",
-            json={"token": "jwt-enriquecido"},
+            payload={
+                "token": "jwt-enriquecido",
+            },
         )
 
     def test_validar_token_expirado(self) -> None:
         """Token expirado não deve trazer claims."""
         resposta = _resposta_validar_token(
-            {"valido": False, "expirado": True},
+            {
+                "valido": False,
+                "expirado": True,
+            },
             status_code=401,
         )
 
-        with patch(
-            _CLIENTE_TOKEN_MS,
-            return_value=_mock_cliente(resposta),
-        ):
+        cliente = _mock_cliente(resposta)
+
+        with patch(_TOKEN_MS_CLIENT, cliente):
             response = APIClient().post(
                 reverse("validar-token"),
-                {"token": "jwt-expirado"},
+                {
+                    "token": "jwt-expirado",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 401
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
         corpo = response.json()
+
         assert corpo["valido"] is False
         assert corpo["expirado"] is True
         assert "claims" not in corpo
 
-    def test_validar_token_sem_token_retorna_400(self) -> None:
+    def test_validar_token_sem_token_retorna_400(
+        self,
+    ) -> None:
         """Payload sem `token` não deve chamar o Token-MS."""
-        with patch(_CLIENTE_TOKEN_MS) as mock_cliente_token_ms:
+        cliente = MagicMock()
+
+        with patch(_TOKEN_MS_CLIENT, cliente):
             response = APIClient().post(
                 reverse("validar-token"),
                 {},
@@ -930,47 +937,58 @@ class TestValidarTokenView:
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 400
-        mock_cliente_token_ms.assert_not_called()
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_validar_token_com_timeout_retorna_504(self) -> None:
+        cliente.post.assert_not_called()
+
+    def test_validar_token_com_timeout_retorna_504(
+        self,
+    ) -> None:
         """Timeout ao validar retorna 504."""
         cliente = MagicMock()
-        cliente.__enter__.return_value = cliente
         cliente.post.side_effect = httpx.TimeoutException("timeout")
 
-        with patch(_CLIENTE_TOKEN_MS, return_value=cliente):
+        with patch(_TOKEN_MS_CLIENT, cliente):
             response = APIClient().post(
                 reverse("validar-token"),
-                {"token": "jwt-enriquecido"},
+                {
+                    "token": "jwt-enriquecido",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 504
+        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT
 
-    def test_validar_token_ms_indisponivel_retorna_502(self) -> None:
+    def test_validar_token_ms_indisponivel_retorna_502(
+        self,
+    ) -> None:
         """Falha de conexão retorna 502."""
         cliente = MagicMock()
-        cliente.__enter__.return_value = cliente
         cliente.post.side_effect = httpx.TransportError("falha conexão")
 
-        with patch(_CLIENTE_TOKEN_MS, return_value=cliente):
+        with patch(_TOKEN_MS_CLIENT, cliente):
             response = APIClient().post(
                 reverse("validar-token"),
-                {"token": "jwt-enriquecido"},
+                {
+                    "token": "jwt-enriquecido",
+                },
                 format="json",
                 HTTP_X_API_KEY="chave-secreta",
             )
 
-        assert response.status_code == 502
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
-    def test_validar_token_sem_api_key_retorna_401(self) -> None:
+    def test_validar_token_sem_api_key_retorna_401(
+        self,
+    ) -> None:
         """Deve exigir API Key, mesmo padrão das demais rotas."""
         response = APIClient().post(
             reverse("validar-token"),
-            {"token": "jwt-enriquecido"},
+            {
+                "token": "jwt-enriquecido",
+            },
             format="json",
         )
 
-        assert response.status_code == 401
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

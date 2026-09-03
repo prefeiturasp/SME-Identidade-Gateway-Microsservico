@@ -43,10 +43,13 @@ from apps.autenticacao.api.serializers import (
 from apps.autenticacao.api_key import AutenticacaoApiKey
 from apps.autenticacao.gatilho_auditoria import disparar_gatilho
 from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
-from apps.core.clientes.token_ms import cliente_token_ms
+from apps.core.api_clients import get_api_client
 from apps.core.http import resposta_do_servico
 
 _TOKEN_MS_INDISPONIVEL = {"erro": "token-ms indisponível"}
+_TOKEN_MS_TIMEOUT = {"erro": "token-ms timeout"}
+
+_client = get_api_client("token")
 
 
 def _obter_token_enriquecido(
@@ -69,14 +72,13 @@ def _obter_token_enriquecido(
         expiração, ou ``None`` caso não seja possível obtê-los.
     """
     try:
-        with cliente_token_ms() as cliente:
-            resposta = cliente.post(
-                f"/api/v1/token/enriquecido/{conta_keycloak['kc_user_id']}/",
-                json={
-                    **conta_keycloak,
-                    "perfil": perfil,
-                },
-            )
+        resposta = _client.post(
+            f"/api/v1/token/enriquecido/{conta_keycloak['kc_user_id']}/",
+            payload={
+                **conta_keycloak,
+                "perfil": perfil,
+            },
+        )
     except httpx.HTTPError:
         return None
 
@@ -288,12 +290,9 @@ class PerfisPorLoginView(APIView):
             return Response(status=204)
 
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.get(
-                    f"/api/v1/perfis/{conta['kc_user_id']}/"
-                )
+            resposta = _client.get(f"/api/v1/perfis/{conta['kc_user_id']}/")
         except httpx.TimeoutException:
-            return Response({"erro": "token-ms timeout"}, status=504)
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
@@ -347,16 +346,15 @@ class DadosAcessoView(APIView):
             return Response(status=204)
 
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.post(
-                    f"/api/v1/token/enriquecido/{conta['kc_user_id']}/",
-                    json={
-                        **conta,
-                        "perfil": perfil,
-                    },
-                )
+            resposta = _client.post(
+                f"/api/v1/token/enriquecido/{conta['kc_user_id']}/",
+                payload={
+                    **conta,
+                    "perfil": perfil,
+                },
+            )
         except httpx.TimeoutException:
-            return Response({"erro": "token-ms timeout"}, status=504)
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
@@ -409,13 +407,12 @@ class ValidarTokenView(APIView):
         entrada.is_valid(raise_exception=True)
 
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.post(
-                    "/api/v1/token/validar/",
-                    json=entrada.validated_data,
-                )
+            resposta = _client.post(
+                "/api/v1/token/validar/",
+                payload=entrada.validated_data,
+            )
         except httpx.TimeoutException:
-            return Response({"erro": "token-ms timeout"}, status=504)
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 

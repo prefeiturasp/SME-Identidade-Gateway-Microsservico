@@ -28,6 +28,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "sme_sidecar_sdk.integrations.django.ObservabilityMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -95,9 +96,7 @@ API_KEY_TOKEN_MS_HEADER = os.getenv("API_KEY_TOKEN_MS_HEADER", "X-API-Key")
 # Destino do gatilho de auditoria — só avisa atividade, não envia o
 # evento em si. Timeout curto: o disparo ocorre dentro de fluxos que
 # o usuário está esperando.
-AUDIT_MS_URL = os.getenv(
-    "AUDIT_MS_URL", ""
-)
+AUDIT_MS_URL = os.getenv("AUDIT_MS_URL", "")
 AUDIT_MS_TIMEOUT = float(os.getenv("AUDIT_MS_TIMEOUT", "2"))
 
 # API Key própria para a chamada de serviço Gateway → Audit-MS —
