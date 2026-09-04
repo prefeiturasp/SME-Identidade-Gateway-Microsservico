@@ -23,7 +23,7 @@ SME-Identidade-Token-Microsservico.
 
 import httpx
 from django.conf import settings
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -270,11 +270,23 @@ class PerfisPorLoginView(APIView):
     authentication_classes = [AutenticacaoApiKey]
 
     @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="sistema_id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Identificador do sistema.",
+            ),
+        ],
         responses=PerfisPorLoginResponseSerializer,
         tags=["Níveis de Acesso"],
     )
     def get(self, request: Request, login: str) -> Response:
         """Retorna os perfis de acesso vinculados ao login.
+
+        O parâmetro opcional ``sistema_id`` pode ser informado via query string
+        para restringir os perfis ao sistema desejado.
 
         Args:
             request: Requisição HTTP recebida.
@@ -285,12 +297,22 @@ class PerfisPorLoginView(APIView):
             o login não existir no Keycloak ou não houver projeção
             para ele no Token-MS.
         """
+        sistema_id = request.query_params.get("sistema_id")
+
         conta = _resolver_conta_keycloak(login)
         if not conta:
             return Response(status=204)
 
+        params = {}
+
+        if sistema_id:
+            params["sistema_id"] = sistema_id
+
         try:
-            resposta = _client.get(f"/api/v1/perfis/{conta['kc_user_id']}/")
+            resposta = _client.get(
+                f"/api/v1/perfis/{conta['kc_user_id']}/",
+                params=params,
+            )
         except httpx.TimeoutException:
             return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
@@ -325,11 +347,28 @@ class DadosAcessoView(APIView):
     authentication_classes = [AutenticacaoApiKey]
 
     @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="sistema_id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Identificador do sistema.",
+            ),
+        ],
         responses=DadosAcessoResponseSerializer,
         tags=["Níveis de Acesso"],
     )
-    def get(self, request: Request, login: str, perfil: str) -> Response:
+    def get(
+        self,
+        request: Request,
+        login: str,
+        perfil: str,
+    ) -> Response:
         """Retorna o token enriquecido e as permissões reais do perfil.
+
+        O parâmetro opcional ``sistema_id`` pode ser informado via query string
+            para restringir os perfis ao sistema desejado.
 
         Args:
             request: Requisição HTTP recebida.
@@ -341,6 +380,8 @@ class DadosAcessoView(APIView):
             (sem corpo) se o login não existir no Keycloak ou não
             houver projeção para ele no Token-MS.
         """
+        sistema_id = request.query_params.get("sistema_id")
+
         conta = _resolver_conta_keycloak(login)
         if not conta:
             return Response(status=204)
@@ -351,6 +392,7 @@ class DadosAcessoView(APIView):
                 payload={
                     **conta,
                     "perfil": perfil,
+                    "sistema_id": sistema_id,
                 },
             )
         except httpx.TimeoutException:
