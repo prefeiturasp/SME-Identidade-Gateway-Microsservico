@@ -444,8 +444,20 @@ class TestAutenticacaoEndpoints:
     def test_perfis_por_login_retorna_projecao_real_do_token_ms(
         self,
     ) -> None:
-        """Deve retornar perfis vindos do Token-MS."""
-        resposta_token_ms = _resposta_perfis_token_ms(_PROJECAO_TOKEN_MS)
+        """Deve retornar perfis vindos do Token-MS filtrados por sistema."""
+        resposta_token_ms = _resposta_perfis_token_ms(
+            {
+                **_PROJECAO_TOKEN_MS,
+                "perfis": [
+                    {
+                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "sistema_id": 102,
+                        "nome": "professor",
+                        "ativo": True,
+                    },
+                ],
+            }
+        )
 
         cliente = _mock_cliente(resposta_token_ms)
 
@@ -462,6 +474,7 @@ class TestAutenticacaoEndpoints:
                     "usuario-perfis",
                     kwargs={"login": "1234567"},
                 ),
+                {"sistema_id": 102},
                 HTTP_X_API_KEY="chave-secreta",
             )
 
@@ -471,9 +484,11 @@ class TestAutenticacaoEndpoints:
 
         assert corpo["rf"] == "1234567"
         assert corpo["perfis"][0]["nome"] == "professor"
+        assert corpo["perfis"][0]["sistema_id"] == 102
 
         cliente.get.assert_called_once_with(
-            f"/api/v1/perfis/{_CONTA_KEYCLOAK['kc_user_id']}/"
+            f"/api/v1/perfis/{_CONTA_KEYCLOAK['kc_user_id']}/",
+            params={"sistema_id": "102"},
         )
 
     def test_perfis_por_login_sem_conta_keycloak_retorna_204(
@@ -611,6 +626,7 @@ class TestAutenticacaoEndpoints:
                         "perfil": "professor",
                     },
                 ),
+                {"sistema_id": 102},
                 HTTP_X_API_KEY="chave-secreta",
             )
 
@@ -622,10 +638,11 @@ class TestAutenticacaoEndpoints:
         assert corpo["permissoes"][0]["sistema_nome"] == "CoreSSO"
 
         cliente.post.assert_called_once_with(
-            ("/api/v1/token/enriquecido/" f"{_CONTA_KEYCLOAK['kc_user_id']}/"),
+            f"/api/v1/token/enriquecido/{_CONTA_KEYCLOAK['kc_user_id']}/",
             payload={
                 **_CONTA_KEYCLOAK,
                 "perfil": "professor",
+                "sistema_id": "102",
             },
         )
 
