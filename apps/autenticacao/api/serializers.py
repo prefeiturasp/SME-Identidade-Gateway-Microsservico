@@ -49,6 +49,7 @@ class PerfilSerializer(serializers.Serializer):
     """Perfil de acesso vinculado a um usuário em um sistema."""
 
     id = serializers.UUIDField()
+    sistema_id = serializers.IntegerField()
     nome = serializers.CharField()
     ativo = serializers.BooleanField()
 
