@@ -83,6 +83,24 @@ def _resposta_perfis_token_ms(
     )
 
 
+def _resposta_sistemas_token_ms(
+    corpo: dict,
+    status_code: int = 200,
+) -> httpx.Response:
+    """Resposta simulada do endpoint de sistemas do usuário."""
+    return httpx.Response(
+        status_code,
+        json=corpo,
+        request=httpx.Request(
+            "GET",
+            (
+                "http://token-ms/api/v1/perfis/"
+                f"{_CONTA_KEYCLOAK['kc_user_id']}/sistemas/"
+            ),
+        ),
+    )
+
+
 def _resposta_token_enriquecido(
     corpo: dict,
     status_code: int = 200,
@@ -596,6 +614,200 @@ class TestAutenticacaoEndpoints:
 
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
 
+    def test_sistemas_com_sucesso_retorna_lista(
+        self,
+    ) -> None:
+        """Deve retornar os sistemas distintos vindos do Token-MS."""
+        resposta_token_ms = _resposta_sistemas_token_ms(
+            {
+                "usuario_id": _CONTA_KEYCLOAK["kc_user_id"],
+                "sistemas": [
+                    {"sistema_id": 1, "sistema_nome": "CoreSSO"},
+                    {"sistema_id": 176, "sistema_nome": "Boletim Online"},
+                ],
+            }
+        )
+
+        cliente = _mock_cliente(resposta_token_ms)
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(_TOKEN_MS_CLIENT, cliente),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-sistemas",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        corpo = response.json()
+
+        assert corpo["sistemas"] == [
+            {"sistema_id": 1, "sistema_nome": "CoreSSO"},
+            {"sistema_id": 176, "sistema_nome": "Boletim Online"},
+        ]
+
+        cliente.get.assert_called_once_with(
+            f"/api/v1/perfis/{_CONTA_KEYCLOAK['kc_user_id']}/sistemas/",
+        )
+
+    def test_sistemas_usuario_nao_encontrado_no_keycloak_retorna_204(
+        self,
+    ) -> None:
+        """Não deve chamar Token-MS sem usuário no Keycloak."""
+        cliente = MagicMock()
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(_TOKEN_MS_CLIENT, cliente),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = None
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-sistemas",
+                    kwargs={"login": "0000000"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        cliente.get.assert_not_called()
+
+    def test_sistemas_usuario_sem_projecao_no_token_ms_retorna_204(
+        self,
+    ) -> None:
+        """Deve retornar 204 quando não existir projeção no Token-MS."""
+        resposta = _resposta_sistemas_token_ms(
+            {
+                "detail": "Projeção de usuário não encontrada.",
+            },
+            status_code=404,
+        )
+
+        cliente = _mock_cliente(resposta)
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(_TOKEN_MS_CLIENT, cliente),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-sistemas",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_sistemas_token_ms_timeout_retorna_504(
+        self,
+    ) -> None:
+        """Timeout do Token-MS retorna 504."""
+        cliente = MagicMock()
+        cliente.get.side_effect = httpx.TimeoutException("timeout")
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(_TOKEN_MS_CLIENT, cliente),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-sistemas",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT
+
+    def test_sistemas_token_ms_indisponivel_retorna_502(
+        self,
+    ) -> None:
+        """Erro de transporte retorna 502."""
+        cliente = MagicMock()
+        cliente.get.side_effect = httpx.TransportError("falha conexão")
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(_TOKEN_MS_CLIENT, cliente),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-sistemas",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_502_BAD_GATEWAY
+
+    def test_sistemas_sem_api_key_retorna_401(
+        self,
+    ) -> None:
+        """Deve exigir API Key para consultar os sistemas."""
+        response = APIClient().get(
+            reverse(
+                "usuario-sistemas",
+                kwargs={"login": "1234567"},
+            ),
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_sistemas_com_erro_generico_token_ms_retorna_erro(
+        self,
+    ) -> None:
+        """Deve repassar erro do Token-MS."""
+        resposta = _resposta_sistemas_token_ms(
+            {
+                "erro": "erro interno",
+            },
+            status_code=500,
+        )
+
+        cliente = _mock_cliente(resposta)
+
+        with (
+            patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin,
+            patch(_TOKEN_MS_CLIENT, cliente),
+        ):
+            mock_keycloak_admin.obter_dados_usuario.return_value = (
+                _CONTA_KEYCLOAK
+            )
+
+            response = APIClient().get(
+                reverse(
+                    "usuario-sistemas",
+                    kwargs={"login": "1234567"},
+                ),
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
     def test_dados_acesso_retorna_token_e_permissoes(
         self,
     ) -> None:
@@ -827,6 +1039,53 @@ class TestAutenticacaoEndpoints:
             )
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def test_logout_notificacao_registra_e_confirma(
+        self,
+    ) -> None:
+        """Deve confirmar o recebimento da notificação de logout global."""
+        response = APIClient().post(
+            reverse("logout-notificacao"),
+            {
+                "sessao_id": "11111111-1111-1111-1111-111111111111",
+                "login": "1234567",
+                "kc_user_id": _CONTA_KEYCLOAK["kc_user_id"],
+            },
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"situacao": "notificacao_recebida"}
+
+    def test_logout_notificacao_sem_api_key_retorna_401(
+        self,
+    ) -> None:
+        """Deve exigir API Key, mesmo padrão das demais rotas."""
+        response = APIClient().post(
+            reverse("logout-notificacao"),
+            {
+                "sessao_id": "11111111-1111-1111-1111-111111111111",
+                "login": "1234567",
+                "kc_user_id": _CONTA_KEYCLOAK["kc_user_id"],
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_logout_notificacao_sem_payload_retorna_400(
+        self,
+    ) -> None:
+        """Deve retornar 400 quando faltar campo obrigatório."""
+        response = APIClient().post(
+            reverse("logout-notificacao"),
+            {"login": "1234567"},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 def _resposta_validar_token(

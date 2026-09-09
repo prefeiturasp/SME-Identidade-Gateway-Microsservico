@@ -6,8 +6,10 @@ from apps.autenticacao.api.views import (
     DadosAcessoView,
     DadosUsuarioView,
     LoginView,
+    LogoutNotificacaoView,
     LogoutView,
     PerfisPorLoginView,
+    SistemasPorLoginView,
     ValidarTokenView,
 )
 from apps.autenticacao.api.views_credenciais import (
@@ -37,6 +39,11 @@ urlpatterns = [
         name="usuario-perfis",
     ),
     path(
+        "usuarios/<str:login>/sistemas/",
+        SistemasPorLoginView.as_view(),
+        name="usuario-sistemas",
+    ),
+    path(
         "usuarios/<str:login>/perfis/<str:perfil>/acesso/",
         DadosAcessoView.as_view(),
         name="usuario-dados-acesso",
@@ -50,5 +57,10 @@ urlpatterns = [
         "alterar-email/",
         AlterarEmailView.as_view(),
         name="alterar-email",
+    ),
+    path(
+        "logout-notificacao/",
+        LogoutNotificacaoView.as_view(),
+        name="logout-notificacao",
     ),
 ]

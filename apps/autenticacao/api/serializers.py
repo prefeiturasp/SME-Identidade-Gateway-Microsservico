@@ -132,6 +132,25 @@ class PerfisPorLoginResponseSerializer(serializers.Serializer):
     perfis = PerfilSerializer(many=True)
 
 
+class SistemaSerializer(serializers.Serializer):
+    """Sistema distinto ao qual um usuário tem acesso."""
+
+    sistema_id = serializers.IntegerField()
+    sistema_nome = serializers.CharField()
+
+
+class SistemasPorLoginResponseSerializer(serializers.Serializer):
+    """Sistemas distintos aos quais um usuário tem acesso.
+
+    Equivale ao novo endpoint
+    ``GET /usuarios/{login}/sistemas/``, que consulta a lista de
+    sistemas consolidada pelo SME-Identidade-Token-Microsservico
+    (``GET /api/v1/perfis/{usuario_id}/sistemas/``).
+    """
+
+    sistemas = SistemaSerializer(many=True)
+
+
 class DadosAcessoResponseSerializer(serializers.Serializer):
     """Contexto de acesso completo de um usuário em um perfil.
 
@@ -232,6 +251,20 @@ class AlterarEmailRequestSerializer(serializers.Serializer):
 
     login = serializers.CharField(help_text=_AJUDA_LOGIN)
     email = serializers.EmailField(help_text="Novo endereço de e-mail.")
+
+
+class LogoutNotificacaoRequestSerializer(serializers.Serializer):
+    """Notificação de logout global recebida do SSO-Microsservico.
+
+    Endpoint de teste E2E do mecanismo de logout global do SSO-MS: o
+    Gateway não mantém sessão própria (ver ``LogoutView``), então
+    apenas confirma o recebimento da notificação, sem invalidar nada
+    localmente.
+    """
+
+    sessao_id = serializers.CharField()
+    login = serializers.CharField()
+    kc_user_id = serializers.CharField()
 
 
 class OperacaoConfirmadaResponseSerializer(serializers.Serializer):

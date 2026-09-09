@@ -21,6 +21,8 @@ mesmo padrão usado pelo SME-Identidade-ETL e pelo
 SME-Identidade-Token-Microsservico.
 """
 
+import logging
+
 import httpx
 from django.conf import settings
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
@@ -34,9 +36,12 @@ from apps.autenticacao.api.serializers import (
     DadosUsuarioResponseSerializer,
     LoginRequestSerializer,
     LoginResponseSerializer,
+    LogoutNotificacaoRequestSerializer,
     LogoutRequestSerializer,
     LogoutResponseSerializer,
+    OperacaoConfirmadaResponseSerializer,
     PerfisPorLoginResponseSerializer,
+    SistemasPorLoginResponseSerializer,
     ValidarTokenRequestSerializer,
     ValidarTokenResponseSerializer,
 )
@@ -45,6 +50,8 @@ from apps.autenticacao.gatilho_auditoria import disparar_gatilho
 from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
 from apps.core.api_clients import get_api_client
 from apps.core.http import resposta_do_servico
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_MS_INDISPONIVEL = {"erro": "token-ms indisponível"}
 _TOKEN_MS_TIMEOUT = {"erro": "token-ms timeout"}
@@ -330,6 +337,57 @@ class PerfisPorLoginView(APIView):
         return Response(saida.data)
 
 
+class SistemasPorLoginView(APIView):
+    """Retorna os sistemas distintos aos quais um usuário tem acesso.
+
+    Resolve o ``kc_user_id`` no Keycloak e consulta a lista de
+    sistemas consolidada pelo SME-Identidade-Token-Microsservico
+    (``GET /api/v1/perfis/{usuario_id}/sistemas/``).
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        responses=SistemasPorLoginResponseSerializer,
+        tags=["Níveis de Acesso"],
+    )
+    def get(self, request: Request, login: str) -> Response:
+        """Retorna os sistemas distintos vinculados ao login.
+
+        Args:
+            request: Requisição HTTP recebida.
+            login: RF, CPF ou login do usuário.
+
+        Returns:
+            Lista de sistemas do usuário; 204 (sem corpo) se o login
+            não existir no Keycloak ou não houver projeção para ele
+            no Token-MS.
+        """
+        conta = _resolver_conta_keycloak(login)
+        if not conta:
+            return Response(status=204)
+
+        try:
+            resposta = _client.get(
+                f"/api/v1/perfis/{conta['kc_user_id']}/sistemas/",
+            )
+        except httpx.TimeoutException:
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
+        except httpx.TransportError:
+            return Response(_TOKEN_MS_INDISPONIVEL, status=502)
+
+        if resposta.status_code == 404:
+            return Response(status=204)
+        if resposta.status_code != 200:
+            return resposta_do_servico(resposta)
+
+        corpo = resposta.json()
+        saida = SistemasPorLoginResponseSerializer(
+            {"sistemas": corpo.get("sistemas", [])}
+        )
+        return Response(saida.data)
+
+
 class DadosAcessoView(APIView):
     """Retorna o contexto de acesso completo de um usuário/perfil.
 
@@ -459,3 +517,46 @@ class ValidarTokenView(APIView):
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
         return resposta_do_servico(resposta)
+
+
+class LogoutNotificacaoView(APIView):
+    """Recebe notificações de logout global do SSO-Microsservico.
+
+    Endpoint de teste E2E do mecanismo de logout global do SSO-MS:
+    quando uma sessão compartilhada é encerrada, o SSO-MS notifica em
+    paralelo cada sistema conectado. O Gateway não mantém sessão
+    própria (ver ``LogoutView``), então apenas confirma o recebimento
+    da notificação, sem invalidar nada localmente.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=LogoutNotificacaoRequestSerializer,
+        responses=OperacaoConfirmadaResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Registra o recebimento de uma notificação de logout global.
+
+        Args:
+            request: Requisição HTTP com ``sessao_id``, ``login`` e
+                ``kc_user_id``.
+
+        Returns:
+            Confirmação do recebimento da notificação.
+        """
+        entrada = LogoutNotificacaoRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        logger.info(
+            "Notificação de logout global recebida: login=%s "
+            "sessao_id=%s",
+            entrada.validated_data["login"],
+            entrada.validated_data["sessao_id"],
+        )
+
+        saida = OperacaoConfirmadaResponseSerializer(
+            {"situacao": "notificacao_recebida"}
+        )
+        return Response(saida.data)
