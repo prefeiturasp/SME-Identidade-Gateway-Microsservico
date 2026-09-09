@@ -150,6 +150,7 @@ Se o token já estiver inválido ou expirado, a resposta continua `200` — o re
 | Método | Endpoint | Descrição |
 |---|---|---|
 | `GET` | `/usuarios/{login}/perfis/` | Perfis de acesso do usuário |
+| `GET` | `/usuarios/{login}/sistemas/` | Sistemas distintos que o usuário acessa |
 | `GET` | `/usuarios/{login}/perfis/{perfil}/acesso/` | Token enriquecido + permissões do perfil |
 
 Consulta avulsa — útil para recarregar perfis/permissões sem logar de
@@ -173,6 +174,15 @@ SME-Identidade-Token-Microsservico o token enriquecido correspondente
 ao perfil selecionado, incluindo
 a claim `perfilSelecionado` (o `{perfil}` da URL) — diferente do token
 composto no login, que ainda não tem um perfil selecionado.
+
+`GET /usuarios/{login}/sistemas/` consulta a lista de sistemas
+distintos aos quais o usuário tem acesso, obtida do
+SME-Identidade-Token-Microsservico via
+`GET {TOKEN_MS_URL}/api/v1/perfis/{kc_user_id}/sistemas/`. Existe
+porque o Token-MS não deduplica sistemas em `GET /perfis/{usuario_id}/`
+(cada item de `permissoes` traz seu próprio `sistema_id`/`sistema_nome`,
+repetido por módulo) — este endpoint expõe essa lista já consolidada,
+sem exigir que o consumidor faça a deduplicação por conta própria.
 
 **Erros:**
 
@@ -297,3 +307,19 @@ e é o client com os protocol mappers de roles configurados no realm
 `resource_access` no token. Direct Access Grants foi habilitado
 manualmente no `auto-servico-qa` via Admin API (não vem habilitado por
 padrão em clients confidenciais).
+
+---
+
+## Logout global (endpoint de recepção — SME-Identidade-SSO-Microsservico)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `POST` | `/logout-notificacao/` | Recebe a notificação de logout global disparada pelo SSO-MS |
+
+Endpoint de **teste E2E** do mecanismo de logout global do
+SME-Identidade-SSO-Microsservico: quando uma sessão compartilhada é
+encerrada, o SSO-MS notifica em paralelo cada sistema conectado (ver
+`docs/arquitetura/fluxo_logout_global.md` no repositório do SSO-MS). O
+Gateway não mantém sessão própria (ver seção "Logout" acima), então
+esta view apenas registra o recebimento (`sessao_id`, `login`,
+`kc_user_id`) e confirma — não invalida nada real localmente.
