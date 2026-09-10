@@ -30,6 +30,8 @@ from rest_framework.views import APIView
 
 from apps.autenticacao import keycloak_admin
 from apps.autenticacao.api.serializers import (
+    ClientTokenRequestSerializer,
+    ClientTokenResponseSerializer,
     DadosAcessoResponseSerializer,
     DadosUsuarioResponseSerializer,
     LoginRequestSerializer,
@@ -37,6 +39,8 @@ from apps.autenticacao.api.serializers import (
     LogoutRequestSerializer,
     LogoutResponseSerializer,
     PerfisPorLoginResponseSerializer,
+    ValidarClientTokenRequestSerializer,
+    ValidarClientTokenResponseSerializer,
     ValidarTokenRequestSerializer,
     ValidarTokenResponseSerializer,
 )
@@ -459,3 +463,93 @@ class ValidarTokenView(APIView):
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
         return resposta_do_servico(resposta)
+
+
+class ClientTokenView(APIView):
+    """Autentica um sistema no Keycloak via Client Credentials.
+
+    Expõe o fluxo de autenticação machine-to-machine, independente
+    da autenticação de usuários.
+
+    O endpoint recebe ``client_id`` e ``client_secret`` e retorna
+    o access token emitido pelo Keycloak para a Service Account
+    associada ao client.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=ClientTokenRequestSerializer,
+        responses=ClientTokenResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Obtém um access token utilizando Client Credentials.
+
+        Args:
+            request: Requisição HTTP contendo ``client_id`` e
+                ``client_secret``.
+
+        Returns:
+            Resposta HTTP contendo ``access_token``, ``token_type`` e
+            ``expires_in`` quando a autenticação for bem-sucedida.
+            Retorna HTTP 401 quando o client não puder ser autenticado.
+        """
+        entrada = ClientTokenRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        resultado = keycloak_admin.autenticar_client(
+            client_id=entrada.validated_data["client_id"],
+            client_secret=entrada.validated_data["client_secret"],
+        )
+
+        if not resultado["autenticado"]:
+            return Response(
+                {
+                    "detalhe": resultado["erro"],
+                },
+                status=401,
+            )
+
+        saida = ClientTokenResponseSerializer(resultado)
+
+        return Response(saida.data)
+
+
+class ValidarClientTokenView(APIView):
+    """Valida um access token emitido pelo Keycloak.
+
+    O endpoint recebe um access token e verifica sua validade por meio
+    das configurações do realm do Keycloak.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=ValidarClientTokenRequestSerializer,
+        responses=ValidarClientTokenResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Valida um access token de autenticação entre sistemas.
+
+        Args:
+            request: Requisição HTTP contendo o access token a ser
+                validado.
+
+        Returns:
+            Resposta HTTP informando se o token é válido, se está
+            expirado e, quando disponíveis, suas claims.
+        """
+        entrada = ValidarClientTokenRequestSerializer(
+            data=request.data,
+        )
+        entrada.is_valid(raise_exception=True)
+
+        resultado = keycloak_admin.validar_token_client(
+            token=entrada.validated_data["token"],
+        )
+
+        saida = ValidarClientTokenResponseSerializer(resultado)
+
+        return Response(saida.data)

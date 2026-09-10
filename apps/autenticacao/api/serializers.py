@@ -265,3 +265,76 @@ class AlterarEmailResponseSerializer(serializers.Serializer):
             " e-mail para reenviar a verificação."
         )
     )
+
+
+class ClientTokenRequestSerializer(serializers.Serializer):
+    """Valida as credenciais de um client para obtenção de token.
+
+    O serializer recebe as credenciais necessárias para autenticação
+    machine-to-machine via Client Credentials.
+
+    Attributes:
+        client_id: Identificador do client configurado no Keycloak.
+        client_secret: Credencial secreta associada ao client.
+    """
+
+    client_id = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        write_only=True,
+    )
+    client_secret = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        write_only=True,
+    )
+
+
+class ClientTokenResponseSerializer(serializers.Serializer):
+    """Representa o token de acesso emitido para um client.
+
+    Attributes:
+        access_token: Access token emitido pelo Keycloak.
+        token_type: Tipo do token retornado, normalmente ``Bearer``.
+        expires_in: Tempo de validade do token, em segundos.
+    """
+
+    access_token = serializers.CharField(read_only=True)
+    token_type = serializers.CharField(read_only=True)
+    expires_in = serializers.IntegerField(read_only=True)
+
+
+class ValidarClientTokenRequestSerializer(serializers.Serializer):
+    """Valida os dados necessários para verificar um access token.
+
+    Attributes:
+        token: Access token JWT que será submetido à validação.
+    """
+
+    token = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        write_only=True,
+    )
+
+
+class ValidarClientTokenResponseSerializer(serializers.Serializer):
+    """Representa o resultado da validação de um access token.
+
+    Attributes:
+        valido: Indica se o token foi validado com sucesso.
+        expirado: Indica se o token está expirado.
+        claims: Claims extraídas do token quando disponíveis.
+        detalhe: Mensagem descritiva quando o token não é válido.
+    """
+
+    valido = serializers.BooleanField(read_only=True)
+    expirado = serializers.BooleanField(read_only=True)
+    claims = serializers.DictField(
+        required=False,
+        read_only=True,
+    )
+    detalhe = serializers.CharField(
+        required=False,
+        read_only=True,
+    )

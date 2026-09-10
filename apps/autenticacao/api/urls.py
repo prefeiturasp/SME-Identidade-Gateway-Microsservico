@@ -3,11 +3,13 @@
 from django.urls import path
 
 from apps.autenticacao.api.views import (
+    ClientTokenView,
     DadosAcessoView,
     DadosUsuarioView,
     LoginView,
     LogoutView,
     PerfisPorLoginView,
+    ValidarClientTokenView,
     ValidarTokenView,
 )
 from apps.autenticacao.api.views_credenciais import (
@@ -21,6 +23,16 @@ from apps.autenticacao.api.views_credenciais import (
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
+    path(
+        "cliente/login/",
+        ClientTokenView.as_view(),
+        name="cliente-login",
+    ),
+    path(
+        "cliente/validar-token/",
+        ValidarClientTokenView.as_view(),
+        name="validar-cliente-token",
+    ),
     path(
         "validar-token/",
         ValidarTokenView.as_view(),
