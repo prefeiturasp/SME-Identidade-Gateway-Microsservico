@@ -470,3 +470,300 @@ class TestResolverUserId(SimpleTestCase):
                 MagicMock(),
                 "0000000",
             )
+
+
+@override_settings(
+    KEYCLOAK_URL_SERVIDOR="https://keycloak.local",
+    KEYCLOAK_REALM="realm-teste",
+    KEYCLOAK_VERIFICAR_SSL=False,
+)
+class TestAutenticarClient(SimpleTestCase):
+    """Testes de autenticar_client."""
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_autenticar_client_com_sucesso(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve autenticar via Client Credentials e retornar o token."""
+        instancia = MagicMock()
+        instancia.token.return_value = {
+            "access_token": "access-token",
+            "expires_in": 300,
+            "token_type": "Bearer",
+        }
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.autenticar_client(
+            "meu-client",
+            "meu-secret",
+        )
+
+        assert resultado == {
+            "autenticado": True,
+            "access_token": "access-token",
+            "expires_in": 300,
+            "token_type": "Bearer",
+        }
+
+        mock_keycloak_openid.assert_called_once_with(
+            server_url="https://keycloak.local",
+            client_id="meu-client",
+            client_secret_key="meu-secret",
+            realm_name="realm-teste",
+            verify=False,
+        )
+        instancia.token.assert_called_once_with(
+            grant_type="client_credentials",
+        )
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_usar_bearer_quando_token_type_nao_for_retornado(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve assumir Bearer quando token_type não vier do Keycloak."""
+        instancia = MagicMock()
+        instancia.token.return_value = {
+            "access_token": "access-token",
+            "expires_in": 300,
+        }
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.autenticar_client(
+            "meu-client",
+            "meu-secret",
+        )
+
+        assert resultado["autenticado"] is True
+        assert resultado["token_type"] == "Bearer"
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_retornar_access_token_vazio_quando_nao_informado(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve retornar string vazia quando access_token não existir."""
+        instancia = MagicMock()
+        instancia.token.return_value = {
+            "expires_in": 300,
+            "token_type": "Bearer",
+        }
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.autenticar_client(
+            "meu-client",
+            "meu-secret",
+        )
+
+        assert resultado["autenticado"] is True
+        assert resultado["access_token"] == ""
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_retornar_erro_para_client_invalido(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve retornar erro amigável quando o client for inválido."""
+        from keycloak.exceptions import KeycloakAuthenticationError
+
+        instancia = MagicMock()
+        instancia.token.side_effect = KeycloakAuthenticationError(
+            "invalid_client"
+        )
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.autenticar_client(
+            "client-invalido",
+            "secret-invalido",
+        )
+
+        assert resultado == {
+            "autenticado": False,
+            "erro": "Client ID ou Client Secret inválidos.",
+        }
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_retornar_erro_quando_service_account_nao_estiver_habilitada(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve informar quando Service Accounts Roles estiver desabilitado."""
+        from keycloak.exceptions import KeycloakPostError
+
+        instancia = MagicMock()
+        instancia.token.side_effect = KeycloakPostError(
+            "Client not enabled to retrieve service account"
+        )
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.autenticar_client(
+            "meu-client",
+            "meu-secret",
+        )
+
+        assert resultado == {
+            "autenticado": False,
+            "erro": (
+                "O client não está habilitado para autenticação via "
+                "Client Credentials. Verifique se 'Service Accounts Roles' "
+                "está habilitado no Keycloak."
+            ),
+        }
+
+
+@override_settings(
+    KEYCLOAK_URL_SERVIDOR="https://keycloak.local",
+    KEYCLOAK_REALM="realm-teste",
+    KEYCLOAK_VERIFICAR_SSL=False,
+)
+class TestValidarTokenClient(SimpleTestCase):
+    """Testes de validar_token_client."""
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_validar_token_com_sucesso(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve retornar as claims quando o token for válido."""
+        instancia = MagicMock()
+        instancia.decode_token.return_value = {
+            "sub": "service-account-id",
+            "preferred_username": "service-account-meu-client",
+            "exp": 1234567890,
+        }
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.validar_token_client("access-token")
+
+        assert resultado == {
+            "valido": True,
+            "expirado": False,
+            "claims": {
+                "sub": "service-account-id",
+                "preferred_username": "service-account-meu-client",
+                "exp": 1234567890,
+            },
+        }
+
+        mock_keycloak_openid.assert_called_once_with(
+            server_url="https://keycloak.local",
+            realm_name="realm-teste",
+            client_id="",
+            verify=False,
+        )
+        instancia.decode_token.assert_called_once_with(
+            "access-token",
+            validate=True,
+        )
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_retornar_expirado_para_token_expirado(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve distinguir token expirado de outros tokens inválidos."""
+        instancia = MagicMock()
+        instancia.decode_token.side_effect = keycloak_admin.JWTExpired()
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.validar_token_client("token-expirado")
+
+        assert resultado == {
+            "valido": False,
+            "expirado": True,
+            "claims": {},
+            "detalhe": "Token expirado.",
+        }
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_retornar_invalido_quando_decode_lancar_value_error(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve retornar token inválido para ValueError."""
+        instancia = MagicMock()
+        instancia.decode_token.side_effect = ValueError("token inválido")
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.validar_token_client("token-invalido")
+
+        assert resultado == {
+            "valido": False,
+            "expirado": False,
+            "claims": {},
+            "detalhe": "Token inválido.",
+        }
+
+    @patch("apps.autenticacao.keycloak_admin.KeycloakOpenID")
+    def test_deve_retornar_invalido_quando_decode_lancar_key_error(
+        self,
+        mock_keycloak_openid: MagicMock,
+    ) -> None:
+        """Deve retornar token inválido para KeyError."""
+        instancia = MagicMock()
+        instancia.decode_token.side_effect = KeyError("claim")
+        mock_keycloak_openid.return_value = instancia
+
+        resultado = keycloak_admin.validar_token_client("token-invalido")
+
+        assert resultado == {
+            "valido": False,
+            "expirado": False,
+            "claims": {},
+            "detalhe": "Token inválido.",
+        }
+
+
+class TestObterErroAutenticacaoClient(SimpleTestCase):
+    """Testes de _obter_erro_autenticacao_client."""
+
+    def test_deve_retornar_erro_para_service_account_desabilitada(
+        self,
+    ) -> None:
+        """Deve orientar a habilitação de Service Accounts Roles."""
+        from keycloak.exceptions import KeycloakPostError
+
+        exc = KeycloakPostError(
+            "Client not enabled to retrieve service account"
+        )
+
+        resultado = keycloak_admin._obter_erro_autenticacao_client(exc)
+
+        assert resultado == (
+            "O client não está habilitado para autenticação via "
+            "Client Credentials. Verifique se 'Service Accounts Roles' "
+            "está habilitado no Keycloak."
+        )
+
+    def test_deve_retornar_erro_para_invalid_client(self) -> None:
+        """Deve traduzir invalid_client para mensagem de domínio."""
+        from keycloak.exceptions import KeycloakAuthenticationError
+
+        exc = KeycloakAuthenticationError("invalid_client")
+
+        resultado = keycloak_admin._obter_erro_autenticacao_client(exc)
+
+        assert resultado == "Client ID ou Client Secret inválidos."
+
+    def test_deve_retornar_erro_para_unauthorized_client(self) -> None:
+        """Deve traduzir unauthorized_client para mensagem de domínio."""
+        from keycloak.exceptions import KeycloakPostError
+
+        exc = KeycloakPostError("unauthorized_client")
+
+        resultado = keycloak_admin._obter_erro_autenticacao_client(exc)
+
+        assert resultado == "Client ID ou Client Secret inválidos."
+
+    def test_deve_retornar_erro_generico_para_falha_desconhecida(
+        self,
+    ) -> None:
+        """Deve evitar expor detalhes internos em erros desconhecidos."""
+        from keycloak.exceptions import KeycloakPostError
+
+        exc = KeycloakPostError("internal server error")
+
+        resultado = keycloak_admin._obter_erro_autenticacao_client(exc)
+
+        assert resultado == "Não foi possível autenticar o client no Keycloak."

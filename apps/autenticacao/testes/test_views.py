@@ -1268,3 +1268,298 @@ class TestValidarTokenView:
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_client_token_sem_api_key_retorna_401(self) -> None:
+        """Deve bloquear autenticação de client sem API Key."""
+        response = APIClient().post(
+            reverse("cliente-login"),
+            data={
+                "client_id": "meu-client",
+                "client_secret": "meu-secret",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_client_token_com_api_key_invalida_retorna_401(
+        self,
+    ) -> None:
+        """Deve bloquear autenticação de client com API Key inválida."""
+        response = APIClient().post(
+            reverse("cliente-login"),
+            data={
+                "client_id": "meu-client",
+                "client_secret": "meu-secret",
+            },
+            format="json",
+            HTTP_X_API_KEY="errada",
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_client_token_sem_client_id_retorna_400(self) -> None:
+        """Deve validar a obrigatoriedade do client_id."""
+        response = APIClient().post(
+            reverse("cliente-login"),
+            data={
+                "client_secret": "meu-secret",
+            },
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_client_token_sem_client_secret_retorna_400(self) -> None:
+        """Deve validar a obrigatoriedade do client_secret."""
+        response = APIClient().post(
+            reverse("cliente-login"),
+            data={
+                "client_id": "meu-client",
+            },
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_client_token_com_sucesso_retorna_access_token(
+        self,
+    ) -> None:
+        """Deve autenticar o client e retornar os dados do token."""
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.autenticar_client.return_value = {
+                "autenticado": True,
+                "access_token": "access-token",
+                "expires_in": 300,
+                "token_type": "Bearer",
+            }
+
+            response = APIClient().post(
+                reverse("cliente-login"),
+                data={
+                    "client_id": "meu-client",
+                    "client_secret": "meu-secret",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "access_token": "access-token",
+            "expires_in": 300,
+            "token_type": "Bearer",
+        }
+
+        mock_keycloak_admin.autenticar_client.assert_called_once_with(
+            client_id="meu-client",
+            client_secret="meu-secret",
+        )
+
+    def test_client_token_com_credenciais_invalidas_retorna_401(
+        self,
+    ) -> None:
+        """Deve retornar 401 quando o client não puder autenticar."""
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.autenticar_client.return_value = {
+                "autenticado": False,
+                "erro": "Client ID ou Client Secret inválidos.",
+            }
+
+            response = APIClient().post(
+                reverse("cliente-login"),
+                data={
+                    "client_id": "client-invalido",
+                    "client_secret": "secret-invalido",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json() == {
+            "detalhe": "Client ID ou Client Secret inválidos.",
+        }
+
+        mock_keycloak_admin.autenticar_client.assert_called_once_with(
+            client_id="client-invalido",
+            client_secret="secret-invalido",
+        )
+
+    def test_client_token_com_service_account_desabilitada_retorna_401(
+        self,
+    ) -> None:
+        """Deve retornar erro quando Service Accounts estiver desabilitado."""
+        mensagem = (
+            "O client não está habilitado para autenticação via "
+            "Client Credentials. Verifique se 'Service Accounts Roles' "
+            "está habilitado no Keycloak."
+        )
+
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.autenticar_client.return_value = {
+                "autenticado": False,
+                "erro": mensagem,
+            }
+
+            response = APIClient().post(
+                reverse("cliente-login"),
+                data={
+                    "client_id": "meu-client",
+                    "client_secret": "meu-secret",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json() == {
+            "detalhe": mensagem,
+        }
+
+    def test_validar_client_token_sem_api_key_retorna_401(
+        self,
+    ) -> None:
+        """Deve bloquear validação de token sem API Key."""
+        response = APIClient().post(
+            reverse("validar-cliente-token"),
+            data={
+                "token": "access-token",
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_validar_client_token_com_api_key_invalida_retorna_401(
+        self,
+    ) -> None:
+        """Deve bloquear validação com API Key inválida."""
+        response = APIClient().post(
+            reverse("validar-cliente-token"),
+            data={
+                "token": "access-token",
+            },
+            format="json",
+            HTTP_X_API_KEY="errada",
+        )
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_validar_client_token_sem_token_retorna_400(
+        self,
+    ) -> None:
+        """Deve validar a obrigatoriedade do token."""
+        response = APIClient().post(
+            reverse("validar-cliente-token"),
+            data={},
+            format="json",
+            HTTP_X_API_KEY="chave-secreta",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_validar_client_token_valido_retorna_claims(
+        self,
+    ) -> None:
+        """Deve retornar as claims quando o token for válido."""
+        claims = {
+            "sub": "service-account-id",
+            "preferred_username": "service-account-meu-client",
+            "client_id": "meu-client",
+        }
+
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.validar_token_client.return_value = {
+                "valido": True,
+                "expirado": False,
+                "claims": claims,
+            }
+
+            response = APIClient().post(
+                reverse("validar-cliente-token"),
+                data={
+                    "token": "access-token-valido",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "valido": True,
+            "expirado": False,
+            "claims": claims,
+        }
+
+        mock_keycloak_admin.validar_token_client.assert_called_once_with(
+            token="access-token-valido",
+        )
+
+    def test_validar_client_token_expirado_retorna_resultado(
+        self,
+    ) -> None:
+        """Deve informar quando o token estiver expirado."""
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.validar_token_client.return_value = {
+                "valido": False,
+                "expirado": True,
+                "claims": {},
+                "detalhe": "Token expirado.",
+            }
+
+            response = APIClient().post(
+                reverse("validar-cliente-token"),
+                data={
+                    "token": "access-token-expirado",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "valido": False,
+            "expirado": True,
+            "claims": {},
+            "detalhe": "Token expirado.",
+        }
+
+        mock_keycloak_admin.validar_token_client.assert_called_once_with(
+            token="access-token-expirado",
+        )
+
+    def test_validar_client_token_invalido_retorna_resultado(
+        self,
+    ) -> None:
+        """Deve informar quando o token for inválido."""
+        with patch(_KEYCLOAK_ADMIN) as mock_keycloak_admin:
+            mock_keycloak_admin.validar_token_client.return_value = {
+                "valido": False,
+                "expirado": False,
+                "claims": {},
+                "detalhe": "Token inválido.",
+            }
+
+            response = APIClient().post(
+                reverse("validar-cliente-token"),
+                data={
+                    "token": "token-invalido",
+                },
+                format="json",
+                HTTP_X_API_KEY="chave-secreta",
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "valido": False,
+            "expirado": False,
+            "claims": {},
+            "detalhe": "Token inválido.",
+        }
+
+        mock_keycloak_admin.validar_token_client.assert_called_once_with(
+            token="token-invalido",
+        )
