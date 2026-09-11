@@ -323,3 +323,199 @@ encerrada, o SSO-MS notifica em paralelo cada sistema conectado (ver
 Gateway não mantém sessão própria (ver seção "Logout" acima), então
 esta view apenas registra o recebimento (`sessao_id`, `login`,
 `kc_user_id`) e confirma — não invalida nada real localmente.
+
+---
+
+## Autenticação entre clients (real — Keycloak)
+
+| Método | Endpoint                 | Descrição                                     |
+| ------ | ------------------------ | --------------------------------------------- |
+| `POST` | `/cliente/login/`        | Autentica um client via Client Credentials    |
+| `POST` | `/cliente/validar-token/`| Valida o access token emitido pelo Keycloak   |
+
+Fluxo destinado à autenticação **machine-to-machine**, sem participação de
+usuário, senha de usuário ou sessão SSO. O sistema consumidor se autentica
+utilizando o `client_id` e o `client_secret` cadastrados no Keycloak.
+
+O fluxo utiliza o grant type `client_credentials` e o access token emitido
+representa a **Service Account** associada ao client.
+
+Para utilizar esse fluxo, o client deve possuir autenticação de client
+habilitada e estar configurado no Keycloak com **Service Accounts Roles**
+habilitado.
+
+### Obtenção do access token
+
+```json
+// POST /cliente/login/
+{
+  "client_id": "sistema-consumidor",
+  "client_secret": "..."
+}
+```
+
+O `client_id` corresponde ao identificador configurado no campo
+**Client ID** do Keycloak, e não ao UUID interno do client.
+
+O Gateway instancia `KeycloakOpenID` com as credenciais recebidas e solicita
+o token ao Keycloak utilizando:
+
+```text
+grant_type=client_credentials
+```
+
+Não há resolução de usuário nem utilização do fluxo de login via
+`password`. Portanto, este mecanismo é independente da autenticação de
+usuários existente em `POST /login/`.
+
+Em caso de sucesso:
+
+```json
+// 200
+{
+  "access_token": "eyJhbGci...",
+  "token_type": "Bearer",
+  "expires_in": 300
+}
+```
+
+`access_token` é o token OIDC emitido diretamente pelo Keycloak para a
+Service Account do client.
+
+`expires_in` representa o tempo de validade do token, em segundos, e deve
+ser considerado pelo sistema consumidor para controlar sua expiração e
+solicitar um novo token quando necessário.
+
+O token deve ser enviado às APIs protegidas utilizando o header HTTP:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+Diferente do `token_enriquecido` utilizado no fluxo de autenticação de
+usuários, este token é emitido diretamente pelo Keycloak e representa o
+sistema autenticado, não um usuário final.
+
+### Identificação do sistema consumidor
+
+A identidade do sistema responsável pela chamada está vinculada ao client
+autenticado no Keycloak.
+
+Cada sistema consumidor deve possuir seu próprio `client_id`, permitindo
+identificar a origem da chamada pelas claims presentes no access token,
+conforme a configuração do realm e dos protocol mappers.
+
+Não é necessário enviar um identificador de sistema separado no fluxo de
+autenticação, evitando divergências entre a identidade informada pela
+aplicação e a identidade registrada no token.
+
+### Validação do access token
+
+O endpoint de validação recebe apenas o access token:
+
+```json
+// POST /cliente/validar-token/
+{
+  "token": "eyJhbGci..."
+}
+```
+
+A validação não exige o reenvio de `client_id` ou `client_secret`.
+
+O Gateway valida o JWT utilizando as configurações e chaves públicas do
+realm do Keycloak. Dessa forma, não é necessário armazenar no Gateway as
+credenciais dos sistemas consumidores para realizar a validação dos tokens.
+
+Token válido:
+
+```json
+// 200
+{
+  "valido": true,
+  "expirado": false,
+  "claims": {
+    "exp": 1788969000,
+    "iat": 1788968700,
+    "azp": "sistema-consumidor"
+  }
+}
+```
+
+Token expirado:
+
+```json
+// 200
+{
+  "valido": false,
+  "expirado": true,
+  "claims": {},
+  "detalhe": "Token expirado."
+}
+```
+
+Token inválido:
+
+```json
+// 200
+{
+  "valido": false,
+  "expirado": false,
+  "claims": {},
+  "detalhe": "Token inválido."
+}
+```
+
+A validação de um token inválido ou expirado retorna `200` porque a
+requisição de validação foi processada corretamente. O estado do token é
+informado pelos campos `valido` e `expirado`.
+
+Isso é diferente do uso do token em uma API protegida: caso um access token
+inválido ou expirado seja utilizado para acessar um recurso que exige
+autenticação, a API destinatária deve rejeitar a chamada conforme sua
+política de segurança.
+
+### Segurança das credenciais
+
+O `client_secret` é utilizado somente durante a solicitação do access token
+e não é retornado na resposta.
+
+O Gateway também não mantém um cadastro local dos secrets dos sistemas
+consumidores. Dessa forma, a quantidade de clients cadastrados no Keycloak
+não exige replicação das credenciais no ambiente ou nas configurações do
+`gateway-ms`.
+
+As credenciais não devem ser armazenadas diretamente no código-fonte dos
+sistemas consumidores. Cada aplicação é responsável por manter seu próprio
+`client_secret` em mecanismo seguro de configuração ou gerenciamento de
+segredos.
+
+### Fluxo de autenticação
+
+```text
+Sistema consumidor
+        |
+        | client_id + client_secret
+        v
+Gateway
+        |
+        | grant_type=client_credentials
+        v
+Keycloak
+        |
+        | access_token
+        | token_type
+        | expires_in
+        v
+Gateway
+        |
+        v
+Sistema consumidor
+        |
+        | Authorization: Bearer <access_token>
+        v
+API protegida
+```
+
+Este fluxo é independente do login de usuários e não altera o funcionamento
+de `POST /login/`, `POST /logout/` ou do token enriquecido gerado pelo
+SME-Identidade-Token-Microsservico.
