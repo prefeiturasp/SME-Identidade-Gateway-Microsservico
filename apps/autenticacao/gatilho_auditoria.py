@@ -19,9 +19,11 @@ import httpx
 from django.conf import settings
 
 from apps.autenticacao import keycloak_admin
-from apps.core.clientes.audit_ms import cliente_audit_ms
+from apps.core.api_clients import get_api_client
 
 _ROTA_GATILHO = "/api/v1/gatilho-poll/"
+
+_client = get_api_client("auditoria")
 
 
 def disparar_gatilho(realm: str, usuario_id: str | None) -> bool:
@@ -41,11 +43,10 @@ def disparar_gatilho(realm: str, usuario_id: str | None) -> bool:
         return False
 
     try:
-        with cliente_audit_ms() as cliente:
-            resposta = cliente.post(
-                _ROTA_GATILHO,
-                json={"realm": realm, "usuario_id": usuario_id},
-            )
+        resposta = _client.post(
+            _ROTA_GATILHO,
+            payload={"realm": realm, "usuario_id": usuario_id},
+        )
     except httpx.HTTPError:
         return False
 

@@ -49,6 +49,7 @@ class PerfilSerializer(serializers.Serializer):
     """Perfil de acesso vinculado a um usuário em um sistema."""
 
     id = serializers.UUIDField()
+    sistema_id = serializers.IntegerField()
     nome = serializers.CharField()
     ativo = serializers.BooleanField()
 
@@ -129,6 +130,25 @@ class PerfisPorLoginResponseSerializer(serializers.Serializer):
 
     rf = serializers.CharField(allow_null=True, required=False)
     perfis = PerfilSerializer(many=True)
+
+
+class SistemaSerializer(serializers.Serializer):
+    """Sistema distinto ao qual um usuário tem acesso."""
+
+    sistema_id = serializers.IntegerField()
+    sistema_nome = serializers.CharField()
+
+
+class SistemasPorLoginResponseSerializer(serializers.Serializer):
+    """Sistemas distintos aos quais um usuário tem acesso.
+
+    Equivale ao novo endpoint
+    ``GET /usuarios/{login}/sistemas/``, que consulta a lista de
+    sistemas consolidada pelo SME-Identidade-Token-Microsservico
+    (``GET /api/v1/perfis/{usuario_id}/sistemas/``).
+    """
+
+    sistemas = SistemaSerializer(many=True)
 
 
 class DadosAcessoResponseSerializer(serializers.Serializer):
@@ -233,6 +253,20 @@ class AlterarEmailRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(help_text="Novo endereço de e-mail.")
 
 
+class LogoutNotificacaoRequestSerializer(serializers.Serializer):
+    """Notificação de logout global recebida do SSO-Microsservico.
+
+    Endpoint de teste E2E do mecanismo de logout global do SSO-MS: o
+    Gateway não mantém sessão própria (ver ``LogoutView``), então
+    apenas confirma o recebimento da notificação, sem invalidar nada
+    localmente.
+    """
+
+    sessao_id = serializers.CharField()
+    login = serializers.CharField()
+    kc_user_id = serializers.CharField()
+
+
 class OperacaoConfirmadaResponseSerializer(serializers.Serializer):
     """Confirmação genérica de que uma operação foi disparada.
 
@@ -263,4 +297,77 @@ class AlterarEmailResponseSerializer(serializers.Serializer):
             " aplicada mesmo assim; repita a operação com o mesmo"
             " e-mail para reenviar a verificação."
         )
+    )
+
+
+class ClientTokenRequestSerializer(serializers.Serializer):
+    """Valida as credenciais de um client para obtenção de token.
+
+    O serializer recebe as credenciais necessárias para autenticação
+    machine-to-machine via Client Credentials.
+
+    Attributes:
+        client_id: Identificador do client configurado no Keycloak.
+        client_secret: Credencial secreta associada ao client.
+    """
+
+    client_id = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        write_only=True,
+    )
+    client_secret = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        write_only=True,
+    )
+
+
+class ClientTokenResponseSerializer(serializers.Serializer):
+    """Representa o token de acesso emitido para um client.
+
+    Attributes:
+        access_token: Access token emitido pelo Keycloak.
+        token_type: Tipo do token retornado, normalmente ``Bearer``.
+        expires_in: Tempo de validade do token, em segundos.
+    """
+
+    access_token = serializers.CharField(read_only=True)
+    token_type = serializers.CharField(read_only=True)
+    expires_in = serializers.IntegerField(read_only=True)
+
+
+class ValidarClientTokenRequestSerializer(serializers.Serializer):
+    """Valida os dados necessários para verificar um access token.
+
+    Attributes:
+        token: Access token JWT que será submetido à validação.
+    """
+
+    token = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        write_only=True,
+    )
+
+
+class ValidarClientTokenResponseSerializer(serializers.Serializer):
+    """Representa o resultado da validação de um access token.
+
+    Attributes:
+        valido: Indica se o token foi validado com sucesso.
+        expirado: Indica se o token está expirado.
+        claims: Claims extraídas do token quando disponíveis.
+        detalhe: Mensagem descritiva quando o token não é válido.
+    """
+
+    valido = serializers.BooleanField(read_only=True)
+    expirado = serializers.BooleanField(read_only=True)
+    claims = serializers.DictField(
+        required=False,
+        read_only=True,
+    )
+    detalhe = serializers.CharField(
+        required=False,
+        read_only=True,
     )

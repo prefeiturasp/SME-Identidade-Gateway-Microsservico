@@ -5,3 +5,4 @@ python-json-logger>=3.0,<4
 drf-spectacular
 python-keycloak>=7.0
 PyJWT>=2.9,<3
+sme-sidecar-sdk @ git+https://github.com/prefeiturasp/SME-Sidecar-SDK.git@v1.0.0

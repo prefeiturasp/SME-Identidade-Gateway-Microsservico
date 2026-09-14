@@ -19,8 +19,12 @@ import json
 from typing import Any
 
 from django.conf import settings
+from jwcrypto.jwt import JWTExpired
+from keycloak import KeycloakOpenID
+from keycloak.exceptions import KeycloakAuthenticationError, KeycloakPostError
 
 ERRO_USUARIO_NAO_ENCONTRADO = "usuário não encontrado"
+_TOKEN_TYPE_BEARER = "Bearer"
 
 
 def obter_admin_keycloak() -> Any:
@@ -387,3 +391,139 @@ def obter_dados_usuario(login: str) -> dict[str, Any] | None:
         "cpf": (atributos.get("cpf") or [None])[0],
         "rf": (atributos.get("rf") or [None])[0],
     }
+
+
+def autenticar_client(
+    client_id: str,
+    client_secret: str,
+) -> dict[str, Any]:
+    """Autentica um client no Keycloak via Client Credentials.
+
+    Realiza a autenticação machine-to-machine.
+    Esse fluxo não envolve usuário, senha ou sessão SSO.
+
+    O access token retornado representa a Service Account associada
+    ao client autenticado no Keycloak.
+
+    Args:
+        client_id: Identificador público do client no Keycloak.
+        client_secret: Credencial secreta associada ao client.
+
+    Returns:
+        Dicionário contendo o resultado da autenticação.
+
+        Em caso de sucesso, contém:
+            autenticado: Indica que a autenticação foi concluída.
+            access_token: Access token emitido pelo Keycloak.
+            expires_in: Tempo de validade do token, em segundos.
+            token_type: Tipo do token retornado.
+
+        Em caso de falha, contém:
+            autenticado: Indica que a autenticação falhou.
+            erro: Mensagem descritiva da falha.
+    """
+    keycloak_openid = KeycloakOpenID(
+        server_url=settings.KEYCLOAK_URL_SERVIDOR,
+        client_id=client_id,
+        client_secret_key=client_secret,
+        realm_name=settings.KEYCLOAK_REALM,
+        verify=settings.KEYCLOAK_VERIFICAR_SSL,
+    )
+
+    try:
+        token = keycloak_openid.token(
+            grant_type="client_credentials",
+        )
+    except (KeycloakAuthenticationError, KeycloakPostError) as exc:
+        return {
+            "autenticado": False,
+            "erro": _obter_erro_autenticacao_client(exc),
+        }
+
+    return {
+        "autenticado": True,
+        "access_token": token.get("access_token", ""),
+        "expires_in": token.get("expires_in"),
+        "token_type": token.get("token_type", _TOKEN_TYPE_BEARER),
+    }
+
+
+def validar_token_client(token: str) -> dict[str, Any]:
+    """Valida um access token emitido pelo Keycloak.
+
+    Valida a assinatura e as claims temporais do JWT utilizando
+    as configurações do realm do Keycloak.
+
+    Args:
+        token: Access token JWT a ser validado.
+
+    Returns:
+        Dicionário contendo o resultado da validação.
+
+        Para um token válido, retorna ``valido=True``, as claims
+        decodificadas e ``expirado=False``.
+
+        Para um token expirado, retorna ``valido=False`` e
+        ``expirado=True``.
+
+        Para outros tokens inválidos, retorna ``valido=False`` e
+        ``expirado=False``.
+    """
+    keycloak_openid = KeycloakOpenID(
+        server_url=settings.KEYCLOAK_URL_SERVIDOR,
+        realm_name=settings.KEYCLOAK_REALM,
+        client_id="",
+        verify=settings.KEYCLOAK_VERIFICAR_SSL,
+    )
+
+    try:
+        claims = keycloak_openid.decode_token(
+            token,
+            validate=True,
+        )
+    except JWTExpired:
+        return {
+            "valido": False,
+            "expirado": True,
+            "claims": {},
+            "detalhe": "Token expirado.",
+        }
+    except (ValueError, KeyError):
+        return {
+            "valido": False,
+            "expirado": False,
+            "claims": {},
+            "detalhe": "Token inválido.",
+        }
+
+    return {
+        "valido": True,
+        "expirado": False,
+        "claims": claims,
+    }
+
+
+def _obter_erro_autenticacao_client(
+    exc: KeycloakAuthenticationError | KeycloakPostError,
+) -> str:
+    """Trata um erro do Keycloak em uma mensagem de domínio.
+
+    Args:
+        exc: Exceção retornada pelo Keycloak durante a autenticação.
+
+    Returns:
+        Mensagem segura e amigável descrevendo a falha.
+    """
+    erro = str(exc).lower()
+
+    if "client not enabled to retrieve service account" in erro:
+        return (
+            "O client não está habilitado para autenticação via "
+            "Client Credentials. Verifique se 'Service Accounts Roles' "
+            "está habilitado no Keycloak."
+        )
+
+    if "invalid_client" in erro or "unauthorized_client" in erro:
+        return "Client ID ou Client Secret inválidos."
+
+    return "Não foi possível autenticar o client no Keycloak."

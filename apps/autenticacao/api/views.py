@@ -21,32 +21,46 @@ mesmo padrão usado pelo SME-Identidade-ETL e pelo
 SME-Identidade-Token-Microsservico.
 """
 
+import logging
+
 import httpx
 from django.conf import settings
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.autenticacao import keycloak_admin
 from apps.autenticacao.api.serializers import (
+    ClientTokenRequestSerializer,
+    ClientTokenResponseSerializer,
     DadosAcessoResponseSerializer,
     DadosUsuarioResponseSerializer,
     LoginRequestSerializer,
     LoginResponseSerializer,
+    LogoutNotificacaoRequestSerializer,
     LogoutRequestSerializer,
     LogoutResponseSerializer,
+    OperacaoConfirmadaResponseSerializer,
     PerfisPorLoginResponseSerializer,
+    SistemasPorLoginResponseSerializer,
+    ValidarClientTokenRequestSerializer,
+    ValidarClientTokenResponseSerializer,
     ValidarTokenRequestSerializer,
     ValidarTokenResponseSerializer,
 )
 from apps.autenticacao.api_key import AutenticacaoApiKey
 from apps.autenticacao.gatilho_auditoria import disparar_gatilho
 from apps.autenticacao.keycloak_admin import ERRO_USUARIO_NAO_ENCONTRADO
-from apps.core.clientes.token_ms import cliente_token_ms
+from apps.core.api_clients import get_api_client
 from apps.core.http import resposta_do_servico
 
+logger = logging.getLogger(__name__)
+
 _TOKEN_MS_INDISPONIVEL = {"erro": "token-ms indisponível"}
+_TOKEN_MS_TIMEOUT = {"erro": "token-ms timeout"}
+
+_client = get_api_client("token")
 
 
 def _obter_token_enriquecido(
@@ -69,14 +83,13 @@ def _obter_token_enriquecido(
         expiração, ou ``None`` caso não seja possível obtê-los.
     """
     try:
-        with cliente_token_ms() as cliente:
-            resposta = cliente.post(
-                f"/api/v1/token/enriquecido/{conta_keycloak['kc_user_id']}/",
-                json={
-                    **conta_keycloak,
-                    "perfil": perfil,
-                },
-            )
+        resposta = _client.post(
+            f"/api/v1/token/enriquecido/{conta_keycloak['kc_user_id']}/",
+            payload={
+                **conta_keycloak,
+                "perfil": perfil,
+            },
+        )
     except httpx.HTTPError:
         return None
 
@@ -268,11 +281,23 @@ class PerfisPorLoginView(APIView):
     authentication_classes = [AutenticacaoApiKey]
 
     @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="sistema_id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Identificador do sistema.",
+            ),
+        ],
         responses=PerfisPorLoginResponseSerializer,
         tags=["Níveis de Acesso"],
     )
     def get(self, request: Request, login: str) -> Response:
         """Retorna os perfis de acesso vinculados ao login.
+
+        O parâmetro opcional ``sistema_id`` pode ser informado via query string
+        para restringir os perfis ao sistema desejado.
 
         Args:
             request: Requisição HTTP recebida.
@@ -283,17 +308,24 @@ class PerfisPorLoginView(APIView):
             o login não existir no Keycloak ou não houver projeção
             para ele no Token-MS.
         """
+        sistema_id = request.query_params.get("sistema_id")
+
         conta = _resolver_conta_keycloak(login)
         if not conta:
             return Response(status=204)
 
+        params = {}
+
+        if sistema_id:
+            params["sistema_id"] = sistema_id
+
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.get(
-                    f"/api/v1/perfis/{conta['kc_user_id']}/"
-                )
+            resposta = _client.get(
+                f"/api/v1/perfis/{conta['kc_user_id']}/",
+                params=params,
+            )
         except httpx.TimeoutException:
-            return Response({"erro": "token-ms timeout"}, status=504)
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
@@ -305,6 +337,57 @@ class PerfisPorLoginView(APIView):
         projecao = resposta.json()
         saida = PerfisPorLoginResponseSerializer(
             {"rf": projecao.get("rf"), "perfis": projecao.get("perfis", [])}
+        )
+        return Response(saida.data)
+
+
+class SistemasPorLoginView(APIView):
+    """Retorna os sistemas distintos aos quais um usuário tem acesso.
+
+    Resolve o ``kc_user_id`` no Keycloak e consulta a lista de
+    sistemas consolidada pelo SME-Identidade-Token-Microsservico
+    (``GET /api/v1/perfis/{usuario_id}/sistemas/``).
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        responses=SistemasPorLoginResponseSerializer,
+        tags=["Níveis de Acesso"],
+    )
+    def get(self, request: Request, login: str) -> Response:
+        """Retorna os sistemas distintos vinculados ao login.
+
+        Args:
+            request: Requisição HTTP recebida.
+            login: RF, CPF ou login do usuário.
+
+        Returns:
+            Lista de sistemas do usuário; 204 (sem corpo) se o login
+            não existir no Keycloak ou não houver projeção para ele
+            no Token-MS.
+        """
+        conta = _resolver_conta_keycloak(login)
+        if not conta:
+            return Response(status=204)
+
+        try:
+            resposta = _client.get(
+                f"/api/v1/perfis/{conta['kc_user_id']}/sistemas/",
+            )
+        except httpx.TimeoutException:
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
+        except httpx.TransportError:
+            return Response(_TOKEN_MS_INDISPONIVEL, status=502)
+
+        if resposta.status_code == 404:
+            return Response(status=204)
+        if resposta.status_code != 200:
+            return resposta_do_servico(resposta)
+
+        corpo = resposta.json()
+        saida = SistemasPorLoginResponseSerializer(
+            {"sistemas": corpo.get("sistemas", [])}
         )
         return Response(saida.data)
 
@@ -326,11 +409,28 @@ class DadosAcessoView(APIView):
     authentication_classes = [AutenticacaoApiKey]
 
     @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="sistema_id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Identificador do sistema.",
+            ),
+        ],
         responses=DadosAcessoResponseSerializer,
         tags=["Níveis de Acesso"],
     )
-    def get(self, request: Request, login: str, perfil: str) -> Response:
+    def get(
+        self,
+        request: Request,
+        login: str,
+        perfil: str,
+    ) -> Response:
         """Retorna o token enriquecido e as permissões reais do perfil.
+
+        O parâmetro opcional ``sistema_id`` pode ser informado via query string
+            para restringir os perfis ao sistema desejado.
 
         Args:
             request: Requisição HTTP recebida.
@@ -342,21 +442,23 @@ class DadosAcessoView(APIView):
             (sem corpo) se o login não existir no Keycloak ou não
             houver projeção para ele no Token-MS.
         """
+        sistema_id = request.query_params.get("sistema_id")
+
         conta = _resolver_conta_keycloak(login)
         if not conta:
             return Response(status=204)
 
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.post(
-                    f"/api/v1/token/enriquecido/{conta['kc_user_id']}/",
-                    json={
-                        **conta,
-                        "perfil": perfil,
-                    },
-                )
+            resposta = _client.post(
+                f"/api/v1/token/enriquecido/{conta['kc_user_id']}/",
+                payload={
+                    **conta,
+                    "perfil": perfil,
+                    "sistema_id": sistema_id,
+                },
+            )
         except httpx.TimeoutException:
-            return Response({"erro": "token-ms timeout"}, status=504)
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
@@ -409,14 +511,145 @@ class ValidarTokenView(APIView):
         entrada.is_valid(raise_exception=True)
 
         try:
-            with cliente_token_ms() as cliente:
-                resposta = cliente.post(
-                    "/api/v1/token/validar/",
-                    json=entrada.validated_data,
-                )
+            resposta = _client.post(
+                "/api/v1/token/validar/",
+                payload=entrada.validated_data,
+            )
         except httpx.TimeoutException:
-            return Response({"erro": "token-ms timeout"}, status=504)
+            return Response(_TOKEN_MS_TIMEOUT, status=504)
         except httpx.TransportError:
             return Response(_TOKEN_MS_INDISPONIVEL, status=502)
 
         return resposta_do_servico(resposta)
+
+
+class LogoutNotificacaoView(APIView):
+    """Recebe notificações de logout global do SSO-Microsservico.
+
+    Endpoint de teste E2E do mecanismo de logout global do SSO-MS:
+    quando uma sessão compartilhada é encerrada, o SSO-MS notifica em
+    paralelo cada sistema conectado. O Gateway não mantém sessão
+    própria (ver ``LogoutView``), então apenas confirma o recebimento
+    da notificação, sem invalidar nada localmente.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=LogoutNotificacaoRequestSerializer,
+        responses=OperacaoConfirmadaResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Registra o recebimento de uma notificação de logout global.
+
+        Args:
+            request: Requisição HTTP com ``sessao_id``, ``login`` e
+                ``kc_user_id``.
+
+        Returns:
+            Confirmação do recebimento da notificação.
+        """
+        entrada = LogoutNotificacaoRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        logger.info(
+            "Notificação de logout global recebida: login=%s sessao_id=%s",
+            entrada.validated_data["login"],
+            entrada.validated_data["sessao_id"],
+        )
+
+        saida = OperacaoConfirmadaResponseSerializer(
+            {"situacao": "notificacao_recebida"}
+        )
+        return Response(saida.data)
+
+
+class ClientTokenView(APIView):
+    """Autentica um sistema no Keycloak via Client Credentials.
+
+    Expõe o fluxo de autenticação machine-to-machine, independente
+    da autenticação de usuários.
+
+    O endpoint recebe ``client_id`` e ``client_secret`` e retorna
+    o access token emitido pelo Keycloak para a Service Account
+    associada ao client.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=ClientTokenRequestSerializer,
+        responses=ClientTokenResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Obtém um access token utilizando Client Credentials.
+
+        Args:
+            request: Requisição HTTP contendo ``client_id`` e
+                ``client_secret``.
+
+        Returns:
+            Resposta HTTP contendo ``access_token``, ``token_type`` e
+            ``expires_in`` quando a autenticação for bem-sucedida.
+            Retorna HTTP 401 quando o client não puder ser autenticado.
+        """
+        entrada = ClientTokenRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        resultado = keycloak_admin.autenticar_client(
+            client_id=entrada.validated_data["client_id"],
+            client_secret=entrada.validated_data["client_secret"],
+        )
+
+        if not resultado["autenticado"]:
+            return Response(
+                {
+                    "detalhe": resultado["erro"],
+                },
+                status=401,
+            )
+
+        saida = ClientTokenResponseSerializer(resultado)
+
+        return Response(saida.data)
+
+
+class ValidarClientTokenView(APIView):
+    """Valida um access token emitido pelo Keycloak.
+
+    O endpoint recebe um access token e verifica sua validade por meio
+    das configurações do realm do Keycloak.
+    """
+
+    authentication_classes = [AutenticacaoApiKey]
+
+    @extend_schema(
+        request=ValidarClientTokenRequestSerializer,
+        responses=ValidarClientTokenResponseSerializer,
+        tags=["Autenticação"],
+    )
+    def post(self, request: Request) -> Response:
+        """Valida um access token de autenticação entre sistemas.
+
+        Args:
+            request: Requisição HTTP contendo o access token a ser
+                validado.
+
+        Returns:
+            Resposta HTTP informando se o token é válido, se está
+            expirado e, quando disponíveis, suas claims.
+        """
+        entrada = ValidarClientTokenRequestSerializer(
+            data=request.data,
+        )
+        entrada.is_valid(raise_exception=True)
+
+        resultado = keycloak_admin.validar_token_client(
+            token=entrada.validated_data["token"],
+        )
+
+        saida = ValidarClientTokenResponseSerializer(resultado)
+
+        return Response(saida.data)

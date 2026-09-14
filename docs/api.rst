@@ -17,10 +17,10 @@ Core
 .. automodule:: apps.core.api.urls
    :members:
 
-.. automodule:: apps.core.clientes.token_ms
+.. automodule:: apps.core.api_clients
    :members:
 
-.. automodule:: apps.core.clientes.audit_ms
+.. automodule:: apps.core.http_client
    :members:
 
 .. automodule:: apps.core.http

@@ -3,11 +3,15 @@
 from django.urls import path
 
 from apps.autenticacao.api.views import (
+    ClientTokenView,
     DadosAcessoView,
     DadosUsuarioView,
     LoginView,
+    LogoutNotificacaoView,
     LogoutView,
     PerfisPorLoginView,
+    SistemasPorLoginView,
+    ValidarClientTokenView,
     ValidarTokenView,
 )
 from apps.autenticacao.api.views_credenciais import (
@@ -21,6 +25,16 @@ from apps.autenticacao.api.views_credenciais import (
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
+    path(
+        "cliente/login/",
+        ClientTokenView.as_view(),
+        name="cliente-login",
+    ),
+    path(
+        "cliente/validar-token/",
+        ValidarClientTokenView.as_view(),
+        name="validar-cliente-token",
+    ),
     path(
         "validar-token/",
         ValidarTokenView.as_view(),
@@ -37,6 +51,11 @@ urlpatterns = [
         name="usuario-perfis",
     ),
     path(
+        "usuarios/<str:login>/sistemas/",
+        SistemasPorLoginView.as_view(),
+        name="usuario-sistemas",
+    ),
+    path(
         "usuarios/<str:login>/perfis/<str:perfil>/acesso/",
         DadosAcessoView.as_view(),
         name="usuario-dados-acesso",
@@ -50,5 +69,10 @@ urlpatterns = [
         "alterar-email/",
         AlterarEmailView.as_view(),
         name="alterar-email",
+    ),
+    path(
+        "logout-notificacao/",
+        LogoutNotificacaoView.as_view(),
+        name="logout-notificacao",
     ),
 ]
