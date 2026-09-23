@@ -1,0 +1,547 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>apps.autenticacao.api.serializers &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=2346ddef"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/translations.js?v=71a39b36"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="../../../../genindex.html" />
+    <link rel="search" title="Buscar" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../autenticacao.html">Autenticação e Níveis de Acesso</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../gestao_usuario.html">Gestão de Usuário</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Código do módulo</a></li>
+      <li class="breadcrumb-item active">apps.autenticacao.api.serializers</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Código-fonte para apps.autenticacao.api.serializers</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Serializers do fluxo de login e níveis de acesso.</span>
+
+<span class="sd">Contratos de entrada/saída espelham o comportamento observado no</span>
+<span class="sd">Swagger da API/EOL legada (``tasks/swaggere_eol.json``, tags</span>
+<span class="sd">``Autenticacao`` e ``AutenticacaoSGP``), servindo como base estável</span>
+<span class="sd">para o roteamento ao SME-Identidade-Token-Microsservico enquanto</span>
+<span class="sd">este último está em desenvolvimento.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">serializers</span>
+
+<span class="n">_AJUDA_LOGIN</span> <span class="o">=</span> <span class="s2">"RF, CPF ou login do usuário."</span>
+
+
+<div class="viewcode-block" id="LoginRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.LoginRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LoginRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Credenciais recebidas para autenticação de um usuário.</span>
+
+<span class="sd">    Equivale ao ``AutenticacaoDto`` do legado</span>
+<span class="sd">    (``POST /api/v1/autenticacao``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">login</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">help_text</span><span class="o">=</span><span class="n">_AJUDA_LOGIN</span><span class="p">)</span>
+    <span class="n">senha</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">write_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help_text</span><span class="o">=</span><span class="s2">"Senha em texto plano (transporte HTTPS)."</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="LogoutRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.LogoutRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LogoutRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Solicitação de encerramento de sessão.</span>
+
+<span class="sd">    O ``refresh_token`` é o mesmo devolvido por ``LoginResponseSerializer``</span>
+<span class="sd">    — o Gateway não mantém sessão própria, então encerrar a sessão</span>
+<span class="sd">    do usuário depende de repassar esse token ao Keycloak.</span>
+<span class="sd">    """</span>
+
+    <span class="n">refresh_token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">write_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">"Refresh token obtido no login."</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="LogoutResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.LogoutResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LogoutResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Confirmação do encerramento de sessão."""</span>
+
+    <span class="n">situacao</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"sessao_encerrada"</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="PerfilSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.PerfilSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PerfilSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Perfil de acesso vinculado a um usuário em um sistema."""</span>
+
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">UUIDField</span><span class="p">()</span>
+    <span class="n">sistema_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">()</span>
+    <span class="n">nome</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">ativo</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="ModuloPermissaoSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ModuloPermissaoSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ModuloPermissaoSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Permissões CRUD de um módulo concedidas por um perfil de acesso.</span>
+
+<span class="sd">    Espelha a estrutura real de origem no CoreSSO</span>
+<span class="sd">    (``SYS_GrupoPermissao``/``SYS_Modulo``): a permissão é concedida</span>
+<span class="sd">    por sistema e módulo, com quatro ações independentes — não existe</span>
+<span class="sd">    um "código de permissão" único no legado.</span>
+<span class="sd">    """</span>
+
+    <span class="n">sistema_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">()</span>
+    <span class="n">sistema_nome</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">modulo_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">()</span>
+    <span class="n">modulo_nome</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">consultar</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">inserir</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">alterar</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">excluir</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="LoginResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.LoginResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LoginResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Resultado completo da autenticação de um usuário.</span>
+
+<span class="sd">    Equivale ao retorno da Etapa 1 do fluxo legado</span>
+<span class="sd">    (``usuarioId``, ``status``, ``nome``, ``codigoRf``), mas</span>
+<span class="sd">    autenticado de verdade contra o Keycloak (grant type</span>
+<span class="sd">    ``password``, via ``KeycloakOpenID``) e já enriquecido numa única</span>
+<span class="sd">    resposta: além dos tokens OIDC brutos do Keycloak, inclui o</span>
+<span class="sd">    ``token_enriquecido`` (composto pelo Gateway a partir das claims</span>
+<span class="sd">    do Keycloak + projeção do Token-MS — ver</span>
+<span class="sd">    ``apps.autenticacao.token_enriquecido``), sem exigir uma segunda</span>
+<span class="sd">    chamada a ``DadosAcessoView``.</span>
+
+<span class="sd">    ``perfis``/``permissoes`` não são repetidos soltos aqui — já vêm</span>
+<span class="sd">    embutidos nas claims do ``token_enriquecido``; quem precisar</span>
+<span class="sd">    desses dados sem decodificar o JWT deve consultar</span>
+<span class="sd">    ``GET /usuarios/{login}/perfis/`` ou</span>
+<span class="sd">    ``GET /usuarios/{login}/perfis/{perfil}/acesso/``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">kc_user_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">nome</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">email</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">ativo</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">cpf</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">roles</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">DictField</span><span class="p">(</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"realm_access/resource_access extraídos do access token,"</span>
+            <span class="s2">" conforme os protocol mappers configurados no client"</span>
+            <span class="s2">" Keycloak (formato bruto do Keycloak, sem filtragem)."</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">access_token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">refresh_token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">expires_in</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">token_enriquecido</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"JWT próprio do Gateway (auth-gateway-ms), assinado com"</span>
+            <span class="s2">" chave própria — não é o access_token OIDC do Keycloak."</span>
+            <span class="s2">" Usado para compatibilidade com sistemas legados. Inclui"</span>
+            <span class="s2">" perfis/permissoes nas claims — decodificar para lê-los."</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">data_expiracao_token_enriquecido</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">DateTimeField</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="PerfisPorLoginResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.PerfisPorLoginResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PerfisPorLoginResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Perfis consolidados de um usuário.</span>
+
+<span class="sd">    Equivale ao ``RetornoPerfisPorLoginDto``</span>
+<span class="sd">    (``GET /api/AutenticacaoSgp/CarregarPerfisPorLogin/{login}``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">perfis</span> <span class="o">=</span> <span class="n">PerfilSerializer</span><span class="p">(</span><span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="SistemaSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.SistemaSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SistemaSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Sistema distinto ao qual um usuário tem acesso."""</span>
+
+    <span class="n">sistema_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">()</span>
+    <span class="n">sistema_nome</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="SistemasPorLoginResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.SistemasPorLoginResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SistemasPorLoginResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Sistemas distintos aos quais um usuário tem acesso.</span>
+
+<span class="sd">    Equivale ao novo endpoint</span>
+<span class="sd">    ``GET /usuarios/{login}/sistemas/``, que consulta a lista de</span>
+<span class="sd">    sistemas consolidada pelo SME-Identidade-Token-Microsservico</span>
+<span class="sd">    (``GET /api/v1/perfis/{usuario_id}/sistemas/``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">sistemas</span> <span class="o">=</span> <span class="n">SistemaSerializer</span><span class="p">(</span><span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DadosAcessoResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.DadosAcessoResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DadosAcessoResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Contexto de acesso completo de um usuário em um perfil.</span>
+
+<span class="sd">    Equivale ao ``RetornoDadosAcessoUsuarioSgpDTO``</span>
+<span class="sd">    (``GET /api/AutenticacaoSgp/CarregarDadosAcesso/usuarios/</span>
+<span class="sd">    {login}/perfis/{perfil}``). O ``token`` aqui é o JWT</span>
+<span class="sd">    enriquecido — composto pelo auth-gateway-ms a partir dos</span>
+<span class="sd">    dados retornados pelo token-ms, não emitido por este serviço.</span>
+<span class="sd">    """</span>
+
+    <span class="n">token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">data_expiracao_token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">DateTimeField</span><span class="p">()</span>
+    <span class="n">permissoes</span> <span class="o">=</span> <span class="n">ModuloPermissaoSerializer</span><span class="p">(</span><span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ValidarTokenRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ValidarTokenRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidarTokenRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Token enriquecido a ser validado.</span>
+
+<span class="sd">    Repassado como está para o Token-MS, que é quem assina o token e</span>
+<span class="sd">    detém a chave necessária para validar a assinatura.</span>
+<span class="sd">    """</span>
+
+    <span class="n">token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">"Token enriquecido (``token_enriquecido`` do login)."</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ValidarTokenResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ValidarTokenResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidarTokenResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Resultado da validação de um token enriquecido.</span>
+
+<span class="sd">    Equivale ao retorno de</span>
+<span class="sd">    ``POST /identidade-token/api/v1/token/validar/`` no Token-MS —</span>
+<span class="sd">    este endpoint só repassa a chamada, sem transformar o resultado.</span>
+<span class="sd">    """</span>
+
+    <span class="n">valido</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">expirado</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">claims</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">DictField</span><span class="p">(</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Claims decodificadas do token, incluindo vinculos/perfis/"</span>
+            <span class="s2">"permissoes — presente apenas quando ``valido`` é ``true``."</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DadosUsuarioResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.DadosUsuarioResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DadosUsuarioResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Dados cadastrais de um usuário, consultados direto no Keycloak.</span>
+
+<span class="sd">    Equivale ao ``DadosUsuarioDTO``</span>
+<span class="sd">    (``GET /api/AutenticacaoSgp/{login}/dados``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">kc_user_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">nome</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">email</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">ativo</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">()</span>
+    <span class="n">cpf</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">allow_null</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RecuperarSenhaRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.RecuperarSenhaRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RecuperarSenhaRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Solicitação de recuperação de senha.</span>
+
+<span class="sd">    Equivale a</span>
+<span class="sd">    ``POST /api/v1/autenticacao/RecuperarSenha/usuario``. Delega</span>
+<span class="sd">    integralmente ao Keycloak: nenhum token de recuperação é gerado</span>
+<span class="sd">    por este serviço, o Keycloak envia o e-mail com o link.</span>
+<span class="sd">    """</span>
+
+    <span class="n">login</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">help_text</span><span class="o">=</span><span class="n">_AJUDA_LOGIN</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="AlterarSenhaRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.AlterarSenhaRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AlterarSenhaRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Solicitação de redefinição administrativa de senha.</span>
+
+<span class="sd">    Equivale a ``POST /api/AutenticacaoSgp/AlterarSenha``. Define</span>
+<span class="sd">    uma senha definitiva no Keycloak — não exige troca no próximo</span>
+<span class="sd">    login.</span>
+<span class="sd">    """</span>
+
+    <span class="n">login</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">help_text</span><span class="o">=</span><span class="n">_AJUDA_LOGIN</span><span class="p">)</span>
+    <span class="n">senha</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">write_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="s2">"Nova senha (transporte HTTPS)."</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="AlterarEmailRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.AlterarEmailRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AlterarEmailRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Solicitação de alteração de e-mail.</span>
+
+<span class="sd">    Equivale a ``POST /api/AutenticacaoSgp/AlterarEmail``. Atualiza</span>
+<span class="sd">    o e-mail no Keycloak e reabre a verificação — o e-mail anterior</span>
+<span class="sd">    deixa de ser considerado verificado até o usuário confirmar o</span>
+<span class="sd">    novo endereço.</span>
+<span class="sd">    """</span>
+
+    <span class="n">login</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">help_text</span><span class="o">=</span><span class="n">_AJUDA_LOGIN</span><span class="p">)</span>
+    <span class="n">email</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">EmailField</span><span class="p">(</span><span class="n">help_text</span><span class="o">=</span><span class="s2">"Novo endereço de e-mail."</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="LogoutNotificacaoRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.LogoutNotificacaoRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LogoutNotificacaoRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Notificação de logout global recebida do SSO-Microsservico.</span>
+
+<span class="sd">    Endpoint de teste E2E do mecanismo de logout global do SSO-MS: o</span>
+<span class="sd">    Gateway não mantém sessão própria (ver ``LogoutView``), então</span>
+<span class="sd">    apenas confirma o recebimento da notificação, sem invalidar nada</span>
+<span class="sd">    localmente.</span>
+<span class="sd">    """</span>
+
+    <span class="n">sessao_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">login</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span>
+    <span class="n">kc_user_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="OperacaoConfirmadaResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.OperacaoConfirmadaResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OperacaoConfirmadaResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Confirmação genérica de que uma operação foi disparada.</span>
+
+<span class="sd">    Usada nas rotas de gestão de credencial, cujo efeito real</span>
+<span class="sd">    (envio de e-mail, troca de senha) ocorre de forma assíncrona no</span>
+<span class="sd">    Keycloak — a resposta apenas confirma que a solicitação foi</span>
+<span class="sd">    aceita e encaminhada.</span>
+<span class="sd">    """</span>
+
+    <span class="n">situacao</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"solicitacao_enviada"</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="AlterarEmailResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.AlterarEmailResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AlterarEmailResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Confirmação da alteração de e-mail, com resultado da verificação.</span>
+
+<span class="sd">    ``update_user`` (troca do e-mail) e ``send_verify_email`` (envio</span>
+<span class="sd">    da notificação) não são atômicos no Keycloak — se a notificação</span>
+<span class="sd">    falhar depois do e-mail já ter sido trocado, o cliente precisa</span>
+<span class="sd">    saber disso em vez de receber um erro genérico que sugere que</span>
+<span class="sd">    nada foi aplicado.</span>
+<span class="sd">    """</span>
+
+    <span class="n">situacao</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"email_alterado"</span><span class="p">)</span>
+    <span class="n">verificacao_enviada</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span>
+        <span class="n">help_text</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"False se o e-mail foi alterado mas o envio da"</span>
+            <span class="s2">" notificação de verificação falhou — a troca já foi"</span>
+            <span class="s2">" aplicada mesmo assim; repita a operação com o mesmo"</span>
+            <span class="s2">" e-mail para reenviar a verificação."</span>
+        <span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ClientTokenRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ClientTokenRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ClientTokenRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Valida as credenciais de um client para obtenção de token.</span>
+
+<span class="sd">    O serializer recebe as credenciais necessárias para autenticação</span>
+<span class="sd">    machine-to-machine via Client Credentials.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        client_id: Identificador do client configurado no Keycloak.</span>
+<span class="sd">        client_secret: Credencial secreta associada ao client.</span>
+<span class="sd">    """</span>
+
+    <span class="n">client_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">allow_blank</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">write_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">client_secret</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">allow_blank</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">write_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ClientTokenResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ClientTokenResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ClientTokenResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Representa o token de acesso emitido para um client.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        access_token: Access token emitido pelo Keycloak.</span>
+<span class="sd">        token_type: Tipo do token retornado, normalmente ``Bearer``.</span>
+<span class="sd">        expires_in: Tempo de validade do token, em segundos.</span>
+<span class="sd">    """</span>
+
+    <span class="n">access_token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">token_type</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">expires_in</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">(</span><span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ValidarClientTokenRequestSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ValidarClientTokenRequestSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidarClientTokenRequestSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Valida os dados necessários para verificar um access token.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        token: Access token JWT que será submetido à validação.</span>
+<span class="sd">    """</span>
+
+    <span class="n">token</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">allow_blank</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">write_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ValidarClientTokenResponseSerializer">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.serializers.ValidarClientTokenResponseSerializer">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidarClientTokenResponseSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Representa o resultado da validação de um access token.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        valido: Indica se o token foi validado com sucesso.</span>
+<span class="sd">        expirado: Indica se o token está expirado.</span>
+<span class="sd">        claims: Claims extraídas do token quando disponíveis.</span>
+<span class="sd">        detalhe: Mensagem descritiva quando o token não é válido.</span>
+<span class="sd">    """</span>
+
+    <span class="n">valido</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span><span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">expirado</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span><span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">claims</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">DictField</span><span class="p">(</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">detalhe</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">read_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

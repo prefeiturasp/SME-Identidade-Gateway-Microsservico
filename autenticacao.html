@@ -1,0 +1,782 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autenticação e Níveis de Acesso &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2346ddef"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/translations.js?v=71a39b36"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="genindex.html" />
+    <link rel="search" title="Buscar" href="search.html" />
+    <link rel="next" title="Gestão de Usuário" href="gestao_usuario.html" />
+    <link rel="prev" title="SME Identidade Gateway Microsserviço" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Autenticação e Níveis de Acesso</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#login-e-dados-do-usuario-real-keycloak">Login e dados do usuário (real — Keycloak)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#funcoes-em-keycloak-admin-py-login">Funções em <code class="docutils literal notranslate"><span class="pre">keycloak_admin.py</span></code> (login)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#logout-real-keycloak">Logout (real — Keycloak)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#niveis-de-acesso-real-token-ms">Níveis de acesso (real — Token-MS)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#gestao-de-credencial-real-keycloak">Gestão de credencial (real — Keycloak)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#funcoes-em-keycloak-admin-py">Funções em <code class="docutils literal notranslate"><span class="pre">keycloak_admin.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#aviso-de-atividade-ao-audit-ms">Aviso de atividade ao Audit-MS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuracao">Configuração</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#logout-global-endpoint-de-recepcao-sme-identidade-sso-microsservico">Logout global (endpoint de recepção — SME-Identidade-SSO-Microsservico)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#autenticacao-entre-clients-real-keycloak">Autenticação entre clients (real — Keycloak)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#obtencao-do-access-token">Obtenção do access token</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#identificacao-do-sistema-consumidor">Identificação do sistema consumidor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#validacao-do-access-token">Validação do access token</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#seguranca-das-credenciais">Segurança das credenciais</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fluxo-de-autenticacao">Fluxo de autenticação</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gestao_usuario.html">Gestão de Usuário</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Autenticação e Níveis de Acesso</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/autenticacao.md.txt" rel="nofollow"> Ver código-fonte da página</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="autenticacao-e-niveis-de-acesso">
+<h1>Autenticação e Níveis de Acesso<a class="headerlink" href="#autenticacao-e-niveis-de-acesso" title="Link para este cabeçalho"></a></h1>
+<p>Definido em <code class="docutils literal notranslate"><span class="pre">apps/autenticacao/</span></code>. Todas as rotas exigem <code class="docutils literal notranslate"><span class="pre">AutenticacaoApiKey</span></code>
+(header configurável, comparado a <code class="docutils literal notranslate"><span class="pre">settings.API_KEY</span></code> — mesmo padrão usado no
+SME-Identidade-ETL).</p>
+<p>Rotas registradas sob <code class="docutils literal notranslate"><span class="pre">identidade-gateway/api/v1/autenticacao/</span></code>.</p>
+<hr class="docutils" />
+<section id="login-e-dados-do-usuario-real-keycloak">
+<h2>Login e dados do usuário (real — Keycloak)<a class="headerlink" href="#login-e-dados-do-usuario-real-keycloak" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/login/</span></code></p></td>
+<td><p>Autentica um usuário via OpenID Connect</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/usuarios/{login}/dados/</span></code></p></td>
+<td><p>Dados cadastrais do usuário</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">login</span></code> aceita RF, CPF, e-mail ou o username do Keycloak — a resolução usa
+a mesma estratégia do comando <code class="docutils literal notranslate"><span class="pre">validar_login</span></code> do SME-Identidade-ETL: tenta
+username exato, depois os atributos customizados <code class="docutils literal notranslate"><span class="pre">rf</span></code> e <code class="docutils literal notranslate"><span class="pre">cpf</span></code>, e por
+último e-mail (se o valor contiver <code class="docutils literal notranslate"><span class="pre">&#64;</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/login/</span></code> resolve a conta e autentica a senha via
+<code class="docutils literal notranslate"><span class="pre">KeycloakOpenID.token()</span></code> (grant type <code class="docutils literal notranslate"><span class="pre">password</span></code>) — não é mock, é login
+real contra o Keycloak. Numa única resposta, também solicita ao
+SME-Identidade-Token-Microsservico a geração do <strong>token enriquecido</strong>,
+não sendo necessária uma segunda chamada para obtê-lo. <code class="docutils literal notranslate"><span class="pre">perfis</span></code> e
+<code class="docutils literal notranslate"><span class="pre">permissoes</span></code> fazem parte das claims do
+<code class="docutils literal notranslate"><span class="pre">token_enriquecido</span></code>; para obtê-los sem decodificar o JWT, usar
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/perfis/</span></code> ou
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/perfis/{perfil}/acesso/</span></code>, que retorna as
+permissões do perfil juntamente com o token.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// POST /login/</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"senha"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// 200</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"kc_user_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"5c29cc47-..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"nome"</span><span class="p">:</span><span class="w"> </span><span class="s2">"FULANO DE TAL"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"email"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fulano@sme.prefeitura.sp.gov.br"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"ativo"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"cpf"</span><span class="p">:</span><span class="w"> </span><span class="s2">"12345678900"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"rf"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"roles"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"realm_access"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"roles"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"default-roles-cotic"</span><span class="p">]},</span>
+<span class="w">    </span><span class="nt">"resource_access"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">"auto-servico-qa"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"roles"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"COTIC"</span><span class="p">]}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"access_token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eyJhbGci..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"refresh_token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eyJhbGci..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"expires_in"</span><span class="p">:</span><span class="w"> </span><span class="mi">300</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"token_enriquecido"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eyJhbGci..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"data_expiracao_token_enriquecido"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-07-20T10:14:34-03:00"</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">roles</span></code> vem no formato bruto do Keycloak (<code class="docutils literal notranslate"><span class="pre">realm_access</span></code>/<code class="docutils literal notranslate"><span class="pre">resource_access</span></code>),
+extraído direto dos claims do access token — sem filtragem ou renomeação.
+Depende dos protocol mappers configurados no client de login
+(<code class="docutils literal notranslate"><span class="pre">KEYCLOAK_LOGIN_CLIENT_ID</span></code>); <code class="docutils literal notranslate"><span class="pre">admin-cli</span></code> não os inclui, <code class="docutils literal notranslate"><span class="pre">auto-servico-qa</span></code>
+sim.</p>
+<p><code class="docutils literal notranslate"><span class="pre">token_enriquecido</span></code> <strong>não é</strong> o <code class="docutils literal notranslate"><span class="pre">access_token</span></code> OIDC do Keycloak — é um JWT
+emitido pelo SME-Identidade-Token-Microsservico, com as claims de
+perfis/permissões já embutidas para o cliente consumir sem precisar de
+outra chamada. O token enriquecido carrega o contexto de autorização do
+usuário e é obtido pelo Gateway junto ao
+SME-Identidade-Token-Microsservico durante o fluxo de autenticação.</p>
+<p>Se o usuário não tiver projeção no SME-Identidade-Token-Microsservico
+(ou o serviço estiver fora do ar), o login <strong>não falha</strong> —
+<code class="docutils literal notranslate"><span class="pre">token_enriquecido</span></code> e sua data de expiração não são retornados na
+resposta.</p>
+<p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/dados/</span></code> retorna o mesmo formato, <strong>sem</strong> <code class="docutils literal notranslate"><span class="pre">roles</span></code> e
+sem os tokens (mesma resolução de <code class="docutils literal notranslate"><span class="pre">login</span></code>, sem autenticar senha). Montar
+<code class="docutils literal notranslate"><span class="pre">roles</span></code> aqui exigiria iterar todos os clients do realm via Admin API (~9
+chamadas por requisição, pois este fluxo não emite um token do próprio
+usuário) — testado e descartado por lentidão. Token Exchange (RFC 8693) foi
+avaliado como alternativa de 1 chamada, mas não está habilitado nesta
+instância do Keycloak (<code class="docutils literal notranslate"><span class="pre">Standard</span> <span class="pre">token</span> <span class="pre">exchange</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">enabled</span> <span class="pre">for</span> <span class="pre">the</span> <span class="pre">requested</span> <span class="pre">client</span></code>).</p>
+<p><strong>Erros:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Situação</p></th>
+<th class="head"><p>Status</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Login não encontrado no Keycloak</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">204</span> <span class="pre">No</span> <span class="pre">Content</span></code> (sem corpo)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Senha incorreta</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">401</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Usuário não encontrado (<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/dados/</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">204</span> <span class="pre">No</span> <span class="pre">Content</span></code> (sem corpo)</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">204</span></code> não tem corpo por definição do protocolo HTTP — o cliente distingue
+“não encontrado” (204) de “encontrado” (200 com corpo) só pelo status, sem
+mensagem de detalhe.</p>
+<section id="funcoes-em-keycloak-admin-py-login">
+<h3>Funções em <code class="docutils literal notranslate"><span class="pre">keycloak_admin.py</span></code> (login)<a class="headerlink" href="#funcoes-em-keycloak-admin-py-login" title="Link para este cabeçalho"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Função</p></th>
+<th class="head"><p>Ação no Keycloak</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">buscar_usuario_por_login(admin,</span> <span class="pre">login)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">get_users()</span></code> por username exato, depois atributos <code class="docutils literal notranslate"><span class="pre">rf</span></code>/<code class="docutils literal notranslate"><span class="pre">cpf</span></code>/<code class="docutils literal notranslate"><span class="pre">email</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">autenticar(login,</span> <span class="pre">senha)</span></code></p></td>
+<td><p>Resolve a conta e chama <code class="docutils literal notranslate"><span class="pre">KeycloakOpenID.token()</span></code> (grant <code class="docutils literal notranslate"><span class="pre">password</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">obter_dados_usuario(login)</span></code></p></td>
+<td><p>Resolve a conta e retorna os dados normalizados</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">encerrar_sessao(refresh_token)</span></code></p></td>
+<td><p>Chama <code class="docutils literal notranslate"><span class="pre">KeycloakOpenID.logout()</span></code> com o refresh token — ver seção Logout, abaixo</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">decodificar_claims_token(token)</span></code></p></td>
+<td><p>Decodifica o payload de um JWT (access ou refresh token) sem validar assinatura — usada para extrair <code class="docutils literal notranslate"><span class="pre">roles</span></code> em <code class="docutils literal notranslate"><span class="pre">autenticar</span></code> e o <code class="docutils literal notranslate"><span class="pre">sub</span></code> (kc_user_id) em <code class="docutils literal notranslate"><span class="pre">encerrar_sessao</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<hr class="docutils" />
+<section id="logout-real-keycloak">
+<h2>Logout (real — Keycloak)<a class="headerlink" href="#logout-real-keycloak" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/logout/</span></code></p></td>
+<td><p>Encerra a sessão associada a um refresh token</p></td>
+</tr>
+</tbody>
+</table>
+<p>O Gateway não mantém sessão própria — encerrar a sessão do usuário depende de repassar ao
+Keycloak o <code class="docutils literal notranslate"><span class="pre">refresh_token</span></code> obtido no login.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// POST /logout/</span>
+<span class="p">{</span><span class="nt">"refresh_token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eyJhbGci..."</span><span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// 200</span>
+<span class="p">{</span><span class="nt">"situacao"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sessao_encerrada"</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>Se o token já estiver inválido ou expirado, a resposta continua <code class="docutils literal notranslate"><span class="pre">200</span></code> — o resultado prático
+(sessão encerrada) já é o mesmo, então o cliente não precisa distinguir os dois casos.</p>
+<p><strong>Erros:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Situação</p></th>
+<th class="head"><p>Status</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Sem <code class="docutils literal notranslate"><span class="pre">refresh_token</span></code> no corpo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">400</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Sem <code class="docutils literal notranslate"><span class="pre">X-API-Key</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">401</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<hr class="docutils" />
+<section id="niveis-de-acesso-real-token-ms">
+<h2>Níveis de acesso (real — Token-MS)<a class="headerlink" href="#niveis-de-acesso-real-token-ms" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/usuarios/{login}/perfis/</span></code></p></td>
+<td><p>Perfis de acesso do usuário</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/usuarios/{login}/sistemas/</span></code></p></td>
+<td><p>Sistemas distintos que o usuário acessa</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/usuarios/{login}/perfis/{perfil}/acesso/</span></code></p></td>
+<td><p>Token enriquecido + permissões do perfil</p></td>
+</tr>
+</tbody>
+</table>
+<p>Consulta avulsa — útil para recarregar perfis/permissões sem logar de
+novo. <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/login/</span></code> já traz tudo isso numa única resposta (ver seção
+acima); estas rotas não são o único caminho para obter o token
+enriquecido.</p>
+<p>Ambas resolvem a conta do usuário no Keycloak (via
+<code class="docutils literal notranslate"><span class="pre">keycloak_admin.obter_dados_usuario</span></code>, mesma normalização usada em
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/dados/</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/perfis/</span></code> consulta os perfis de acesso do usuário
+no SME-Identidade-Token-Microsservico. Já
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/perfis/{perfil}/acesso/</span></code> solicita ao
+SME-Identidade-Token-Microsservico a geração do token enriquecido por
+meio de <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">{TOKEN_MS_URL}/api/v1/token/enriquecido/{kc_user_id}/</span></code>,
+via <code class="docutils literal notranslate"><span class="pre">apps.core.clientes.token_ms</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/perfis/{perfil}/acesso/</span></code> obtém do
+SME-Identidade-Token-Microsservico o token enriquecido correspondente
+ao perfil selecionado, incluindo
+a claim <code class="docutils literal notranslate"><span class="pre">perfilSelecionado</span></code> (o <code class="docutils literal notranslate"><span class="pre">{perfil}</span></code> da URL) — diferente do token
+composto no login, que ainda não tem um perfil selecionado.</p>
+<p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/usuarios/{login}/sistemas/</span></code> consulta a lista de sistemas
+distintos aos quais o usuário tem acesso, obtida do
+SME-Identidade-Token-Microsservico via
+<code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">{TOKEN_MS_URL}/api/v1/perfis/{kc_user_id}/sistemas/</span></code>. Existe
+porque o Token-MS não deduplica sistemas em <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/perfis/{usuario_id}/</span></code>
+(cada item de <code class="docutils literal notranslate"><span class="pre">permissoes</span></code> traz seu próprio <code class="docutils literal notranslate"><span class="pre">sistema_id</span></code>/<code class="docutils literal notranslate"><span class="pre">sistema_nome</span></code>,
+repetido por módulo) — este endpoint expõe essa lista já consolidada,
+sem exigir que o consumidor faça a deduplicação por conta própria.</p>
+<p><strong>Erros:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Situação</p></th>
+<th class="head"><p>Status</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Login não encontrado no Keycloak</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">204</span> <span class="pre">No</span> <span class="pre">Content</span></code> (sem corpo)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Sem projeção para o usuário no Token-MS</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">204</span> <span class="pre">No</span> <span class="pre">Content</span></code> (sem corpo)</p></td>
+</tr>
+<tr class="row-even"><td><p>Token-MS não responde a tempo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">504</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Token-MS inacessível</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">502</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<hr class="docutils" />
+<section id="gestao-de-credencial-real-keycloak">
+<h2>Gestão de credencial (real — Keycloak)<a class="headerlink" href="#gestao-de-credencial-real-keycloak" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/alterar-senha/</span></code></p></td>
+<td><p>Define senha definitiva (não exige troca no próximo login)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/alterar-email/</span></code></p></td>
+<td><p>Atualiza e-mail e reabre a verificação</p></td>
+</tr>
+</tbody>
+</table>
+<p>Diferente das rotas de login, estas <strong>já operam contra o Keycloak de
+verdade</strong> via <code class="docutils literal notranslate"><span class="pre">apps/autenticacao/keycloak_admin.py</span></code> (<code class="docutils literal notranslate"><span class="pre">KeycloakAdmin</span></code>, lib
+<code class="docutils literal notranslate"><span class="pre">python-keycloak</span></code> — mesmo padrão de conexão do ETL). Gestão de credencial é
+responsabilidade nativa do Keycloak: nenhum token de recuperação de senha é
+gerado, armazenado ou validado por este serviço — todo o mecanismo (link
+assinado, expiração, envio de e-mail) é do próprio Keycloak.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// POST /alterar-senha/</span>
+<span class="p">{</span><span class="nt">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span><span class="w"> </span><span class="nt">"senha"</span><span class="p">:</span><span class="w"> </span><span class="s2">"novaSenha"</span><span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// POST /alterar-email/</span>
+<span class="p">{</span><span class="nt">"login"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span><span class="w"> </span><span class="nt">"email"</span><span class="p">:</span><span class="w"> </span><span class="s2">"novo@sme.prefeitura.sp.gov.br"</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Retorno de sucesso (<code class="docutils literal notranslate"><span class="pre">alterar-senha/</span></code>):</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"situacao"</span><span class="p">:</span><span class="w"> </span><span class="s2">"solicitacao_enviada"</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Retorno de sucesso (<code class="docutils literal notranslate"><span class="pre">alterar-email/</span></code>):</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"situacao"</span><span class="p">:</span><span class="w"> </span><span class="s2">"email_alterado"</span><span class="p">,</span><span class="w"> </span><span class="nt">"verificacao_enviada"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">update_user</span></code> (troca do e-mail) e <code class="docutils literal notranslate"><span class="pre">send_verify_email</span></code> (envio da notificação) não
+são atômicos no Keycloak. Se a troca for aplicada mas o envio da verificação
+falhar (ex.: instabilidade do servidor), a resposta continua <code class="docutils literal notranslate"><span class="pre">200</span></code> — o e-mail
+já mudou de fato — com <code class="docutils literal notranslate"><span class="pre">verificacao_enviada:</span> <span class="pre">false</span></code> no corpo, em vez de um
+erro genérico que sugeriria que nada foi aplicado. Repita a chamada com o
+mesmo e-mail para reenviar a verificação.</p>
+<p>Se o <code class="docutils literal notranslate"><span class="pre">login</span></code> não existir no Keycloak, todas as rotas retornam <code class="docutils literal notranslate"><span class="pre">204</span> <span class="pre">No</span> <span class="pre">Content</span></code> (sem corpo).</p>
+<section id="funcoes-em-keycloak-admin-py">
+<h3>Funções em <code class="docutils literal notranslate"><span class="pre">keycloak_admin.py</span></code><a class="headerlink" href="#funcoes-em-keycloak-admin-py" title="Link para este cabeçalho"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Função</p></th>
+<th class="head"><p>Ação no Keycloak</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">redefinir_senha(login,</span> <span class="pre">senha)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">set_user_password(temporary=False)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">alterar_email(login,</span> <span class="pre">novo_email)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">update_user(payload={&quot;email&quot;:</span> <span class="pre">...})</span></code> + <code class="docutils literal notranslate"><span class="pre">send_verify_email</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">disparar_verificacao_email(login)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">send_verify_email</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<hr class="docutils" />
+<section id="aviso-de-atividade-ao-audit-ms">
+<h2>Aviso de atividade ao Audit-MS<a class="headerlink" href="#aviso-de-atividade-ao-audit-ms" title="Link para este cabeçalho"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/login/</span></code>, <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/logout/</span></code>, <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/alterar-senha/</span></code> e <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/alterar-email/</span></code> avisam o
+SME-Identidade-Audit-Microsservico de que houve atividade do usuário
+(<code class="docutils literal notranslate"><span class="pre">apps/autenticacao/gatilho_auditoria.py</span></code>).</p>
+<p>O <code class="docutils literal notranslate"><span class="pre">usuario_id</span></code> do aviso vem de fontes diferentes conforme a rota: em <code class="docutils literal notranslate"><span class="pre">/login/</span></code>, da conta resolvida
+por <code class="docutils literal notranslate"><span class="pre">keycloak_admin.autenticar</span></code>; em <code class="docutils literal notranslate"><span class="pre">/logout/</span></code>, extraído do próprio <code class="docutils literal notranslate"><span class="pre">refresh_token</span></code> (função
+<code class="docutils literal notranslate"><span class="pre">decodificar_claims_token</span></code>) — o endpoint de logout não recebe login/senha, só o token; em
+<code class="docutils literal notranslate"><span class="pre">/alterar-senha/</span></code> e <code class="docutils literal notranslate"><span class="pre">/alterar-email/</span></code>, resolvido a partir do <code class="docutils literal notranslate"><span class="pre">login</span></code> recebido
+(<code class="docutils literal notranslate"><span class="pre">disparar_gatilho_por_login</span></code>).</p>
+<p>O que trafega é apenas <code class="docutils literal notranslate"><span class="pre">{&quot;realm&quot;,</span> <span class="pre">&quot;usuario_id&quot;}</span></code> — <strong>não</strong> um evento de
+auditoria. Dois produtores de evento gerariam timestamps distintos para a
+mesma atividade, e a deduplicação no destino teria de reconciliar formatos
+divergentes; com o aviso mínimo, o Keycloak segue como origem única do dado.
+O aviso apenas antecipa a leitura, que aconteceria de todo modo no ciclo
+agendado do Audit-MS.</p>
+<p>O disparo é acessório ao fluxo que o usuário está esperando: falha de rede,
+timeout ou destino fora do ar são engolidos, no mesmo padrão de degradação
+graciosa já usado quando o token enriquecido não pode ser obtido. Login e
+trocas de credencial continuam respondendo normalmente com o Audit-MS fora do
+ar.</p>
+</section>
+<hr class="docutils" />
+<section id="configuracao">
+<h2>Configuração<a class="headerlink" href="#configuracao" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variável</p></th>
+<th class="head"><p>Padrão</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Chave exigida dos clientes que chamam o Gateway</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_HEADER</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">X-API-Key</span></code></p></td>
+<td><p>Header onde a chave é enviada</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_URL_SERVIDOR</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">https://localhost:8080/</span></code></p></td>
+<td><p>URL do Keycloak</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_REALM</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">COTIC</span></code></p></td>
+<td><p>Realm de destino</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_USUARIO_ADMIN</span></code> / <code class="docutils literal notranslate"><span class="pre">KEYCLOAK_SENHA_ADMIN</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">admin</span></code> / <code class="docutils literal notranslate"><span class="pre">admin</span></code></p></td>
+<td><p>Credenciais do <code class="docutils literal notranslate"><span class="pre">KeycloakAdmin</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_VERIFICAR_SSL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+<td><p>Verificação de certificado TLS</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_LOGIN_CLIENT_ID</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">auto-servico-qa</span></code></p></td>
+<td><p>Client OIDC usado no login (grant <code class="docutils literal notranslate"><span class="pre">password</span></code>) — precisa ter Direct Access Grants habilitado e os protocol mappers de <code class="docutils literal notranslate"><span class="pre">realm_access</span></code>/<code class="docutils literal notranslate"><span class="pre">resource_access</span></code> configurados</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_LOGIN_CLIENT_SECRET</span></code></p></td>
+<td><p>vazio</p></td>
+<td><p>Secret do client de login (obrigatório — <code class="docutils literal notranslate"><span class="pre">auto-servico-qa</span></code> é confidencial)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">TOKEN_MS_URL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://token-ms:8000</span></code></p></td>
+<td><p>URL base do SME-Identidade-Token-Microsservico</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">TOKEN_MS_TIMEOUT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code></p></td>
+<td><p>Timeout (segundos) das chamadas ao Token-MS</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_TOKEN_MS</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Chave de serviço a serviço Gateway → Token-MS (deve corresponder ao <code class="docutils literal notranslate"><span class="pre">API_KEY</span></code> do Token-MS)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_TOKEN_MS_HEADER</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">X-API-Key</span></code></p></td>
+<td><p>Header onde a chave do Token-MS é enviada</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AUDIT_MS_URL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://audit-ms:8000/identidade-auditoria</span></code></p></td>
+<td><p>URL base do SME-Identidade-Audit-Microsservico</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AUDIT_MS_TIMEOUT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">2</span></code></p></td>
+<td><p>Timeout (segundos) do aviso de atividade — curto porque o disparo acontece dentro de fluxos que o usuário aguarda</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_AUDIT_MS</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Chave de serviço a serviço Gateway → Audit-MS (deve corresponder ao <code class="docutils literal notranslate"><span class="pre">API_KEY</span></code> do Audit-MS)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_AUDIT_MS_HEADER</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">X-API-Key</span></code></p></td>
+<td><p>Header onde a chave do Audit-MS é enviada</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">KEYCLOAK_LOGIN_CLIENT_ID</span></code> é distinto de <code class="docutils literal notranslate"><span class="pre">KEYCLOAK_CLIENT_ID</span></code>: o primeiro
+autentica usuário final (login), o segundo é usado só pela Admin API para
+required actions. <code class="docutils literal notranslate"><span class="pre">auto-servico-qa</span></code> é confidencial (exige <code class="docutils literal notranslate"><span class="pre">client_secret</span></code>)
+e é o client com os protocol mappers de roles configurados no realm
+<code class="docutils literal notranslate"><span class="pre">COTIC</span></code>; <code class="docutils literal notranslate"><span class="pre">admin-cli</span></code> é público mas não inclui <code class="docutils literal notranslate"><span class="pre">realm_access</span></code>/
+<code class="docutils literal notranslate"><span class="pre">resource_access</span></code> no token. Direct Access Grants foi habilitado
+manualmente no <code class="docutils literal notranslate"><span class="pre">auto-servico-qa</span></code> via Admin API (não vem habilitado por
+padrão em clients confidenciais).</p>
+</section>
+<hr class="docutils" />
+<section id="logout-global-endpoint-de-recepcao-sme-identidade-sso-microsservico">
+<h2>Logout global (endpoint de recepção — SME-Identidade-SSO-Microsservico)<a class="headerlink" href="#logout-global-endpoint-de-recepcao-sme-identidade-sso-microsservico" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/logout-notificacao/</span></code></p></td>
+<td><p>Recebe a notificação de logout global disparada pelo SSO-MS</p></td>
+</tr>
+</tbody>
+</table>
+<p>Endpoint de <strong>teste E2E</strong> do mecanismo de logout global do
+SME-Identidade-SSO-Microsservico: quando uma sessão compartilhada é
+encerrada, o SSO-MS notifica em paralelo cada sistema conectado (ver
+<code class="docutils literal notranslate"><span class="pre">docs/arquitetura/fluxo_logout_global.md</span></code> no repositório do SSO-MS). O
+Gateway não mantém sessão própria (ver seção “Logout” acima), então
+esta view apenas registra o recebimento (<code class="docutils literal notranslate"><span class="pre">sessao_id</span></code>, <code class="docutils literal notranslate"><span class="pre">login</span></code>,
+<code class="docutils literal notranslate"><span class="pre">kc_user_id</span></code>) e confirma — não invalida nada real localmente.</p>
+</section>
+<hr class="docutils" />
+<section id="autenticacao-entre-clients-real-keycloak">
+<h2>Autenticação entre clients (real — Keycloak)<a class="headerlink" href="#autenticacao-entre-clients-real-keycloak" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/cliente/login/</span></code></p></td>
+<td><p>Autentica um client via Client Credentials</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/cliente/validar-token/</span></code></p></td>
+<td><p>Valida o access token emitido pelo Keycloak</p></td>
+</tr>
+</tbody>
+</table>
+<p>Fluxo destinado à autenticação <strong>machine-to-machine</strong>, sem participação de
+usuário, senha de usuário ou sessão SSO. O sistema consumidor se autentica
+utilizando o <code class="docutils literal notranslate"><span class="pre">client_id</span></code> e o <code class="docutils literal notranslate"><span class="pre">client_secret</span></code> cadastrados no Keycloak.</p>
+<p>O fluxo utiliza o grant type <code class="docutils literal notranslate"><span class="pre">client_credentials</span></code> e o access token emitido
+representa a <strong>Service Account</strong> associada ao client.</p>
+<p>Para utilizar esse fluxo, o client deve possuir autenticação de client
+habilitada e estar configurado no Keycloak com <strong>Service Accounts Roles</strong>
+habilitado.</p>
+<section id="obtencao-do-access-token">
+<h3>Obtenção do access token<a class="headerlink" href="#obtencao-do-access-token" title="Link para este cabeçalho"></a></h3>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// POST /cliente/login/</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"client_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sistema-consumidor"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"client_secret"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>O <code class="docutils literal notranslate"><span class="pre">client_id</span></code> corresponde ao identificador configurado no campo
+<strong>Client ID</strong> do Keycloak, e não ao UUID interno do client.</p>
+<p>O Gateway instancia <code class="docutils literal notranslate"><span class="pre">KeycloakOpenID</span></code> com as credenciais recebidas e solicita
+o token ao Keycloak utilizando:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>grant_type=client_credentials
+</pre></div>
+</div>
+<p>Não há resolução de usuário nem utilização do fluxo de login via
+<code class="docutils literal notranslate"><span class="pre">password</span></code>. Portanto, este mecanismo é independente da autenticação de
+usuários existente em <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/login/</span></code>.</p>
+<p>Em caso de sucesso:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// 200</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"access_token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eyJhbGci..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"token_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Bearer"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"expires_in"</span><span class="p">:</span><span class="w"> </span><span class="mi">300</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">access_token</span></code> é o token OIDC emitido diretamente pelo Keycloak para a
+Service Account do client.</p>
+<p><code class="docutils literal notranslate"><span class="pre">expires_in</span></code> representa o tempo de validade do token, em segundos, e deve
+ser considerado pelo sistema consumidor para controlar sua expiração e
+solicitar um novo token quando necessário.</p>
+<p>O token deve ser enviado às APIs protegidas utilizando o header HTTP:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Authorization: Bearer &lt;access_token&gt;
+</pre></div>
+</div>
+<p>Diferente do <code class="docutils literal notranslate"><span class="pre">token_enriquecido</span></code> utilizado no fluxo de autenticação de
+usuários, este token é emitido diretamente pelo Keycloak e representa o
+sistema autenticado, não um usuário final.</p>
+</section>
+<section id="identificacao-do-sistema-consumidor">
+<h3>Identificação do sistema consumidor<a class="headerlink" href="#identificacao-do-sistema-consumidor" title="Link para este cabeçalho"></a></h3>
+<p>A identidade do sistema responsável pela chamada está vinculada ao client
+autenticado no Keycloak.</p>
+<p>Cada sistema consumidor deve possuir seu próprio <code class="docutils literal notranslate"><span class="pre">client_id</span></code>, permitindo
+identificar a origem da chamada pelas claims presentes no access token,
+conforme a configuração do realm e dos protocol mappers.</p>
+<p>Não é necessário enviar um identificador de sistema separado no fluxo de
+autenticação, evitando divergências entre a identidade informada pela
+aplicação e a identidade registrada no token.</p>
+</section>
+<section id="validacao-do-access-token">
+<h3>Validação do access token<a class="headerlink" href="#validacao-do-access-token" title="Link para este cabeçalho"></a></h3>
+<p>O endpoint de validação recebe apenas o access token:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// POST /cliente/validar-token/</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"token"</span><span class="p">:</span><span class="w"> </span><span class="s2">"eyJhbGci..."</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>A validação não exige o reenvio de <code class="docutils literal notranslate"><span class="pre">client_id</span></code> ou <code class="docutils literal notranslate"><span class="pre">client_secret</span></code>.</p>
+<p>O Gateway valida o JWT utilizando as configurações e chaves públicas do
+realm do Keycloak. Dessa forma, não é necessário armazenar no Gateway as
+credenciais dos sistemas consumidores para realizar a validação dos tokens.</p>
+<p>Token válido:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// 200</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"valido"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"expirado"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"claims"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"exp"</span><span class="p">:</span><span class="w"> </span><span class="mi">1788969000</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"iat"</span><span class="p">:</span><span class="w"> </span><span class="mi">1788968700</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"azp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sistema-consumidor"</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Token expirado:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// 200</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"valido"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"expirado"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"claims"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">  </span><span class="nt">"detalhe"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Token expirado."</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Token inválido:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="c1">// 200</span>
+<span class="p">{</span>
+<span class="w">  </span><span class="nt">"valido"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"expirado"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"claims"</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<span class="w">  </span><span class="nt">"detalhe"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Token inválido."</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>A validação de um token inválido ou expirado retorna <code class="docutils literal notranslate"><span class="pre">200</span></code> porque a
+requisição de validação foi processada corretamente. O estado do token é
+informado pelos campos <code class="docutils literal notranslate"><span class="pre">valido</span></code> e <code class="docutils literal notranslate"><span class="pre">expirado</span></code>.</p>
+<p>Isso é diferente do uso do token em uma API protegida: caso um access token
+inválido ou expirado seja utilizado para acessar um recurso que exige
+autenticação, a API destinatária deve rejeitar a chamada conforme sua
+política de segurança.</p>
+</section>
+<section id="seguranca-das-credenciais">
+<h3>Segurança das credenciais<a class="headerlink" href="#seguranca-das-credenciais" title="Link para este cabeçalho"></a></h3>
+<p>O <code class="docutils literal notranslate"><span class="pre">client_secret</span></code> é utilizado somente durante a solicitação do access token
+e não é retornado na resposta.</p>
+<p>O Gateway também não mantém um cadastro local dos secrets dos sistemas
+consumidores. Dessa forma, a quantidade de clients cadastrados no Keycloak
+não exige replicação das credenciais no ambiente ou nas configurações do
+<code class="docutils literal notranslate"><span class="pre">gateway-ms</span></code>.</p>
+<p>As credenciais não devem ser armazenadas diretamente no código-fonte dos
+sistemas consumidores. Cada aplicação é responsável por manter seu próprio
+<code class="docutils literal notranslate"><span class="pre">client_secret</span></code> em mecanismo seguro de configuração ou gerenciamento de
+segredos.</p>
+</section>
+<section id="fluxo-de-autenticacao">
+<h3>Fluxo de autenticação<a class="headerlink" href="#fluxo-de-autenticacao" title="Link para este cabeçalho"></a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Sistema consumidor
+        |
+        | client_id + client_secret
+        v
+Gateway
+        |
+        | grant_type=client_credentials
+        v
+Keycloak
+        |
+        | access_token
+        | token_type
+        | expires_in
+        v
+Gateway
+        |
+        v
+Sistema consumidor
+        |
+        | Authorization: Bearer &lt;access_token&gt;
+        v
+API protegida
+</pre></div>
+</div>
+<p>Este fluxo é independente do login de usuários e não altera o funcionamento
+de <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/login/</span></code>, <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/logout/</span></code> ou do token enriquecido gerado pelo
+SME-Identidade-Token-Microsservico.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Rodapé">
+        <a href="index.html" class="btn btn-neutral float-left" title="SME Identidade Gateway Microsserviço" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Anterior</a>
+        <a href="gestao_usuario.html" class="btn btn-neutral float-right" title="Gestão de Usuário" accesskey="n" rel="next">Próximo <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

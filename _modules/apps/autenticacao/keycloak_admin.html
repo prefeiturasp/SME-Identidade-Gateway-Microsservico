@@ -1,0 +1,670 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>apps.autenticacao.keycloak_admin &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=2346ddef"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/translations.js?v=71a39b36"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="../../../genindex.html" />
+    <link rel="search" title="Buscar" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../autenticacao.html">Autenticação e Níveis de Acesso</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../gestao_usuario.html">Gestão de Usuário</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Código do módulo</a></li>
+      <li class="breadcrumb-item active">apps.autenticacao.keycloak_admin</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Código-fonte para apps.autenticacao.keycloak_admin</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Cliente Keycloak Admin para gestão de credenciais.</span>
+
+<span class="sd">Reaproveita o mesmo padrão de conexão do SME-Identidade-ETL</span>
+<span class="sd">(``apps/controle_etl/orquestrador_kc.py:obter_admin_keycloak``),</span>
+<span class="sd">mantendo um único jeito de instanciar ``KeycloakAdmin`` na</span>
+<span class="sd">plataforma SME-Identidade.</span>
+
+<span class="sd">As rotas de recuperação/alteração de senha e alteração de e-mail</span>
+<span class="sd">delegam integralmente ao Keycloak — não reimplementam geração de</span>
+<span class="sd">token de recuperação nem envio de e-mail, usam os mecanismos nativos</span>
+<span class="sd">(``send_update_account``, ``set_user_password``) já providos pelo</span>
+<span class="sd">Keycloak, evitando duplicar lógica de segurança sensível.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jwcrypto.jwt</span><span class="w"> </span><span class="kn">import</span> <span class="n">JWTExpired</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">keycloak</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakOpenID</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">keycloak.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakAuthenticationError</span><span class="p">,</span> <span class="n">KeycloakPostError</span>
+
+<span class="n">ERRO_USUARIO_NAO_ENCONTRADO</span> <span class="o">=</span> <span class="s2">"usuário não encontrado"</span>
+<span class="n">_TOKEN_TYPE_BEARER</span> <span class="o">=</span> <span class="s2">"Bearer"</span>
+
+
+<div class="viewcode-block" id="obter_admin_keycloak">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.obter_admin_keycloak">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">obter_admin_keycloak</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Retorna um cliente Keycloak Admin autenticado.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Instância de ``KeycloakAdmin`` conectada ao realm</span>
+<span class="sd">        configurado em ``settings.KEYCLOAK_REALM``.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">keycloak</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakAdmin</span>
+
+    <span class="k">return</span> <span class="n">KeycloakAdmin</span><span class="p">(</span>
+        <span class="n">server_url</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_URL_SERVIDOR</span><span class="p">,</span>
+        <span class="n">username</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_USUARIO_ADMIN</span><span class="p">,</span>
+        <span class="n">password</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_SENHA_ADMIN</span><span class="p">,</span>
+        <span class="n">realm_name</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+        <span class="n">user_realm_name</span><span class="o">=</span><span class="s2">"master"</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_VERIFICAR_SSL</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolver_user_id</span><span class="p">(</span><span class="n">admin</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve o ``user_id`` do Keycloak a partir do login informado.</span>
+
+<span class="sd">    Usa ``buscar_usuario_por_login`` (RF/CPF/e-mail/username) em vez</span>
+<span class="sd">    de ``admin.get_user_id`` (só busca por username exato e retorna</span>
+<span class="sd">    ``None``, sem lançar exceção, quando não encontra — o que faria</span>
+<span class="sd">    as rotas de credencial chamarem o Keycloak com ``user_id=None``</span>
+<span class="sd">    em vez de responder 404).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        admin: Cliente KeycloakAdmin autenticado.</span>
+<span class="sd">        login: RF, CPF, e-mail ou username do usuário.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        O ``id`` do usuário no Keycloak.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeycloakGetError: Se o usuário não existir no realm.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">keycloak.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakGetError</span>
+
+    <span class="n">conta</span> <span class="o">=</span> <span class="n">buscar_usuario_por_login</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">conta</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">KeycloakGetError</span><span class="p">(</span><span class="n">ERRO_USUARIO_NAO_ENCONTRADO</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">conta</span><span class="p">[</span><span class="s2">"id"</span><span class="p">])</span>
+
+
+<div class="viewcode-block" id="disparar_redefinicao_senha">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.disparar_redefinicao_senha">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">disparar_redefinicao_senha</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Dispara o e-mail nativo do Keycloak para redefinição de senha.</span>
+
+<span class="sd">    Usa a required action ``UPDATE_PASSWORD`` via</span>
+<span class="sd">    ``send_update_account``, que envia um e-mail com link assinado</span>
+<span class="sd">    pelo próprio Keycloak — nenhum token de recuperação é gerado ou</span>
+<span class="sd">    validado por este serviço.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF ou username do usuário no Keycloak.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeycloakGetError: Se o usuário não existir no realm.</span>
+<span class="sd">    """</span>
+    <span class="n">admin</span> <span class="o">=</span> <span class="n">obter_admin_keycloak</span><span class="p">()</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">_resolver_user_id</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">send_update_account</span><span class="p">(</span>
+        <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+        <span class="n">payload</span><span class="o">=</span><span class="p">[</span><span class="s2">"UPDATE_PASSWORD"</span><span class="p">],</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_ID</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="disparar_verificacao_email">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.disparar_verificacao_email">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">disparar_verificacao_email</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Dispara o e-mail nativo do Keycloak para verificação de e-mail.</span>
+
+<span class="sd">    Usa ``send_verify_email`` — o Keycloak envia o link de</span>
+<span class="sd">    confirmação; este serviço não manipula o token de verificação.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF ou username do usuário no Keycloak.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeycloakGetError: Se o usuário não existir no realm.</span>
+<span class="sd">    """</span>
+    <span class="n">admin</span> <span class="o">=</span> <span class="n">obter_admin_keycloak</span><span class="p">()</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">_resolver_user_id</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">send_verify_email</span><span class="p">(</span>
+        <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_ID</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="alterar_email">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.alterar_email">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">alterar_email</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">novo_email</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Atualiza o e-mail do usuário e reabre a verificação.</span>
+
+<span class="sd">    O Keycloak marca o novo e-mail como não verificado</span>
+<span class="sd">    automaticamente ao atualizar o atributo; disparamos o envio do</span>
+<span class="sd">    e-mail de verificação em seguida. As duas operações não são</span>
+<span class="sd">    atômicas no Keycloak — se ``send_verify_email`` falhar depois de</span>
+<span class="sd">    ``update_user`` já ter sido aplicado (ex.: instabilidade do</span>
+<span class="sd">    servidor), o e-mail já mudou de fato. Por isso a falha na</span>
+<span class="sd">    verificação é capturada separadamente em vez de propagar: quem</span>
+<span class="sd">    chama precisa saber que a troca ocorreu mesmo que a notificação</span>
+<span class="sd">    não tenha saído, em vez de receber um erro genérico que sugere</span>
+<span class="sd">    que nada foi aplicado.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF ou username do usuário no Keycloak.</span>
+<span class="sd">        novo_email: Novo endereço de e-mail a ser associado.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict com ``email_alterado`` (sempre ``True`` se não lançar) e</span>
+<span class="sd">        ``verificacao_enviada`` (``False`` se ``send_verify_email``</span>
+<span class="sd">        falhar após o e-mail já ter sido trocado).</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeycloakGetError: Se o usuário não existir no realm.</span>
+<span class="sd">        KeycloakError: Se a própria troca de e-mail (``update_user``)</span>
+<span class="sd">            falhar — nesse caso nada foi aplicado.</span>
+<span class="sd">    """</span>
+    <span class="n">admin</span> <span class="o">=</span> <span class="n">obter_admin_keycloak</span><span class="p">()</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">_resolver_user_id</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">update_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="p">{</span><span class="s2">"email"</span><span class="p">:</span> <span class="n">novo_email</span><span class="p">})</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">admin</span><span class="o">.</span><span class="n">send_verify_email</span><span class="p">(</span>
+            <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+            <span class="n">client_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_ID</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"email_alterado"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"verificacao_enviada"</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"email_alterado"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"verificacao_enviada"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="redefinir_senha">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.redefinir_senha">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">redefinir_senha</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">nova_senha</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Define uma nova senha definitiva para o usuário.</span>
+
+<span class="sd">    Reset administrativo direto (ex.: suporte redefinindo a senha de</span>
+<span class="sd">    um usuário). ``temporary=False`` define a senha como definitiva —</span>
+<span class="sd">    diferente de ``UPDATE_PASSWORD`` via required action (usada em</span>
+<span class="sd">    ``disparar_redefinicao_senha``), não força troca no próximo</span>
+<span class="sd">    login, pois quem está definindo a senha aqui é uma ação</span>
+<span class="sd">    administrativa explícita, não um esquecimento do usuário.</span>
+
+<span class="sd">    ``set_user_password`` só troca a senha — não remove uma</span>
+<span class="sd">    ``UPDATE_PASSWORD`` já presente em ``requiredActions`` do usuário</span>
+<span class="sd">    (ex.: usuário criado pelo ETL com senha inicial temporária). Sem</span>
+<span class="sd">    limpar essa lista, o password grant do Gateway continua recusado</span>
+<span class="sd">    com ``invalid_grant: Account is not fully set up`` mesmo após a</span>
+<span class="sd">    senha definitiva ser aplicada.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF ou username do usuário no Keycloak.</span>
+<span class="sd">        nova_senha: Nova senha a ser definida.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        KeycloakGetError: Se o usuário não existir no realm.</span>
+<span class="sd">    """</span>
+    <span class="n">admin</span> <span class="o">=</span> <span class="n">obter_admin_keycloak</span><span class="p">()</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">_resolver_user_id</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">set_user_password</span><span class="p">(</span>
+        <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">nova_senha</span><span class="p">,</span> <span class="n">temporary</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">admin</span><span class="o">.</span><span class="n">update_user</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="p">{</span><span class="s2">"requiredActions"</span><span class="p">:</span> <span class="p">[]})</span></div>
+
+
+
+<div class="viewcode-block" id="buscar_usuario_por_login">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.buscar_usuario_por_login">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">buscar_usuario_por_login</span><span class="p">(</span><span class="n">admin</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Busca a conta do usuário por username, RF ou CPF.</span>
+
+<span class="sd">    Mesma estratégia de busca do comando ``validar_login``: tenta</span>
+<span class="sd">    username exato primeiro, depois os atributos customizados ``rf``</span>
+<span class="sd">    e ``cpf`` (a plataforma usa RF/CPF como username na maioria dos</span>
+<span class="sd">    casos, mas nem sempre).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        admin: Cliente KeycloakAdmin autenticado.</span>
+<span class="sd">        login: RF, CPF, e-mail ou username do usuário.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dados brutos da conta no Keycloak, ou ``None`` se não</span>
+<span class="sd">        encontrada.</span>
+<span class="sd">    """</span>
+    <span class="n">queries</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"username"</span><span class="p">:</span> <span class="n">login</span><span class="p">,</span> <span class="s2">"exact"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"rf:</span><span class="si">{</span><span class="n">login</span><span class="si">}</span><span class="s2">"</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">"q"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"cpf:</span><span class="si">{</span><span class="n">login</span><span class="si">}</span><span class="s2">"</span><span class="p">},</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="s2">"@"</span> <span class="ow">in</span> <span class="n">login</span><span class="p">:</span>
+        <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"email"</span><span class="p">:</span> <span class="n">login</span><span class="p">,</span> <span class="s2">"exact"</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+
+    <span class="k">for</span> <span class="n">query</span> <span class="ow">in</span> <span class="n">queries</span><span class="p">:</span>
+        <span class="n">usuarios</span> <span class="o">=</span> <span class="n">admin</span><span class="o">.</span><span class="n">get_users</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">usuarios</span><span class="p">:</span>
+            <span class="n">resultado</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">usuarios</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">resultado</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="decodificar_claims_token">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.decodificar_claims_token">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">decodificar_claims_token</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Decodifica o payload de um JWT sem validar a assinatura.</span>
+
+<span class="sd">    Seguro neste contexto porque o token acabou de ser emitido pelo</span>
+<span class="sd">    próprio Keycloak na mesma chamada (``kc_openid.token()``) — não é</span>
+<span class="sd">    um token recebido de terceiros que precisaria de verificação.</span>
+<span class="sd">    Usado tanto para extrair ``realm_access``/``resource_access``</span>
+<span class="sd">    (roles) do access token quanto o ``sub`` (user id) do refresh</span>
+<span class="sd">    token, quando não há outra forma de identificar o usuário na</span>
+<span class="sd">    operação em questão (ex.: encerramento de sessão, que só recebe</span>
+<span class="sd">    o refresh token).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        token: JWT retornado por ``KeycloakOpenID.token()`` (access</span>
+<span class="sd">            ou refresh token).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Claims do token, ou ``{}`` se não for possível decodificar.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">token</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"."</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">payload</span> <span class="o">+=</span> <span class="s2">"="</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span> <span class="o">%</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">claims</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">base64</span><span class="o">.</span><span class="n">urlsafe_b64decode</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">claims</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">IndexError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{}</span></div>
+
+
+
+<div class="viewcode-block" id="autenticar">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.autenticar">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">autenticar</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">senha</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Autentica um usuário no Keycloak via OpenID Connect.</span>
+
+<span class="sd">    Resolve o ``username`` real a partir do ``login`` informado (que</span>
+<span class="sd">    pode ser RF, CPF, e-mail ou o próprio username) e efetua login</span>
+<span class="sd">    via grant type ``password`` — mesmo fluxo do comando</span>
+<span class="sd">    ``validar_login``, mas sem resetar senha: aqui a senha informada</span>
+<span class="sd">    pelo usuário é usada como está.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF, e-mail ou username do usuário.</span>
+<span class="sd">        senha: Senha em texto plano.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict com ``autenticado`` (bool) e, se sucesso, os dados da</span>
+<span class="sd">        conta (``kc_user_id``, ``username``, ``nome``, ``email``,</span>
+<span class="sd">        ``ativo``), ``roles`` (``realm_access``/``resource_access``</span>
+<span class="sd">        extraídos do access token) e do token (``access_token``,</span>
+<span class="sd">        ``refresh_token``, ``expires_in``); se falha, ``erro`` com o</span>
+<span class="sd">        motivo.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">keycloak</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakOpenID</span>
+
+    <span class="n">admin</span> <span class="o">=</span> <span class="n">obter_admin_keycloak</span><span class="p">()</span>
+    <span class="n">conta</span> <span class="o">=</span> <span class="n">buscar_usuario_por_login</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">conta</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"autenticado"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"erro"</span><span class="p">:</span> <span class="n">ERRO_USUARIO_NAO_ENCONTRADO</span><span class="p">}</span>
+
+    <span class="n">kc_openid</span> <span class="o">=</span> <span class="n">KeycloakOpenID</span><span class="p">(</span>
+        <span class="n">server_url</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_URL_SERVIDOR</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_ID</span><span class="p">,</span>
+        <span class="n">client_secret_key</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_SECRET</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">realm_name</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_VERIFICAR_SSL</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">token</span> <span class="o">=</span> <span class="n">kc_openid</span><span class="o">.</span><span class="n">token</span><span class="p">(</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"username"</span><span class="p">,</span> <span class="n">login</span><span class="p">),</span> <span class="n">senha</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"autenticado"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"erro"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)}</span>
+
+    <span class="n">atributos</span> <span class="o">=</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"attributes"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">nome</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="nb">filter</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="p">[</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"firstName"</span><span class="p">),</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"lastName"</span><span class="p">)])</span>
+    <span class="p">)</span>
+    <span class="n">claims</span> <span class="o">=</span> <span class="n">decodificar_claims_token</span><span class="p">(</span><span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"access_token"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"autenticado"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"kc_user_id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+        <span class="s2">"username"</span><span class="p">:</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"username"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+        <span class="s2">"nome"</span><span class="p">:</span> <span class="n">nome</span><span class="p">,</span>
+        <span class="s2">"email"</span><span class="p">:</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"email"</span><span class="p">),</span>
+        <span class="s2">"ativo"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"enabled"</span><span class="p">)),</span>
+        <span class="s2">"cpf"</span><span class="p">:</span> <span class="p">(</span><span class="n">atributos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"cpf"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[</span><span class="kc">None</span><span class="p">])[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="s2">"rf"</span><span class="p">:</span> <span class="p">(</span><span class="n">atributos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rf"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[</span><span class="kc">None</span><span class="p">])[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="s2">"roles"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"realm_access"</span><span class="p">:</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"realm_access"</span><span class="p">,</span> <span class="p">{}),</span>
+            <span class="s2">"resource_access"</span><span class="p">:</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"resource_access"</span><span class="p">,</span> <span class="p">{}),</span>
+        <span class="p">},</span>
+        <span class="s2">"access_token"</span><span class="p">:</span> <span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"access_token"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+        <span class="s2">"refresh_token"</span><span class="p">:</span> <span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"refresh_token"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+        <span class="s2">"expires_in"</span><span class="p">:</span> <span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"expires_in"</span><span class="p">),</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="encerrar_sessao">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.encerrar_sessao">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">encerrar_sessao</span><span class="p">(</span><span class="n">refresh_token</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Invalida a sessão associada ao refresh token informado.</span>
+
+<span class="sd">    Equivale ao endpoint OIDC padrão do Keycloak</span>
+<span class="sd">    (``/protocol/openid-connect/logout``), chamado com o mesmo client</span>
+<span class="sd">    de login usado em ``autenticar`` — não um endpoint próprio deste</span>
+<span class="sd">    serviço, o Keycloak é quem de fato encerra a sessão e emite o</span>
+<span class="sd">    evento ``LOGOUT``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        refresh_token: Refresh token obtido no login, retornado por</span>
+<span class="sd">            ``autenticar``.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict com ``encerrada`` (``True`` se o Keycloak confirmou o</span>
+<span class="sd">        encerramento; ``False`` se o token já estava inválido/</span>
+<span class="sd">        expirado — não é considerado erro, o resultado prático já é</span>
+<span class="sd">        o mesmo) e ``kc_user_id`` (extraído do próprio refresh token,</span>
+<span class="sd">        usado para o gatilho de auditoria; ``None`` se não for</span>
+<span class="sd">        possível decodificar).</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">keycloak</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakOpenID</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">keycloak.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeycloakPostError</span>
+
+    <span class="n">kc_user_id</span> <span class="o">=</span> <span class="n">decodificar_claims_token</span><span class="p">(</span><span class="n">refresh_token</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sub"</span><span class="p">)</span>
+
+    <span class="n">kc_openid</span> <span class="o">=</span> <span class="n">KeycloakOpenID</span><span class="p">(</span>
+        <span class="n">server_url</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_URL_SERVIDOR</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_ID</span><span class="p">,</span>
+        <span class="n">client_secret_key</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_LOGIN_CLIENT_SECRET</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">realm_name</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_VERIFICAR_SSL</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">kc_openid</span><span class="o">.</span><span class="n">logout</span><span class="p">(</span><span class="n">refresh_token</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">KeycloakPostError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"encerrada"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"kc_user_id"</span><span class="p">:</span> <span class="n">kc_user_id</span><span class="p">}</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"encerrada"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"kc_user_id"</span><span class="p">:</span> <span class="n">kc_user_id</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="obter_dados_usuario">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.obter_dados_usuario">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">obter_dados_usuario</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Busca os dados cadastrais de um usuário no Keycloak.</span>
+
+<span class="sd">    Não inclui ``roles``: montá-las aqui exigiria iterar todos os</span>
+<span class="sd">    clients do realm via Admin API (~9 chamadas), pois este fluxo não</span>
+<span class="sd">    tem um access token próprio do usuário para ler os claims direto</span>
+<span class="sd">    do JWT (diferente de ``autenticar``). Testado e descartado por</span>
+<span class="sd">    lentidão — Token Exchange (RFC 8693) também não está disponível</span>
+<span class="sd">    nesta instância do Keycloak (``Standard token exchange is not</span>
+<span class="sd">    enabled for the requested client``).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF, e-mail ou username do usuário.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dict com ``kc_user_id``, ``username``, ``nome``, ``email``,</span>
+<span class="sd">        ``ativo``, ``cpf`` e ``rf``, ou ``None`` se não encontrado.</span>
+<span class="sd">    """</span>
+    <span class="n">admin</span> <span class="o">=</span> <span class="n">obter_admin_keycloak</span><span class="p">()</span>
+    <span class="n">conta</span> <span class="o">=</span> <span class="n">buscar_usuario_por_login</span><span class="p">(</span><span class="n">admin</span><span class="p">,</span> <span class="n">login</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">conta</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">atributos</span> <span class="o">=</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"attributes"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">nome</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+        <span class="nb">filter</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="p">[</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"firstName"</span><span class="p">),</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"lastName"</span><span class="p">)])</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"kc_user_id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+        <span class="s2">"username"</span><span class="p">:</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"username"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+        <span class="s2">"nome"</span><span class="p">:</span> <span class="n">nome</span><span class="p">,</span>
+        <span class="s2">"email"</span><span class="p">:</span> <span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"email"</span><span class="p">),</span>
+        <span class="s2">"ativo"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">conta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"enabled"</span><span class="p">)),</span>
+        <span class="s2">"cpf"</span><span class="p">:</span> <span class="p">(</span><span class="n">atributos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"cpf"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[</span><span class="kc">None</span><span class="p">])[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="s2">"rf"</span><span class="p">:</span> <span class="p">(</span><span class="n">atributos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rf"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[</span><span class="kc">None</span><span class="p">])[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="autenticar_client">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.autenticar_client">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">autenticar_client</span><span class="p">(</span>
+    <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">client_secret</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Autentica um client no Keycloak via Client Credentials.</span>
+
+<span class="sd">    Realiza a autenticação machine-to-machine.</span>
+<span class="sd">    Esse fluxo não envolve usuário, senha ou sessão SSO.</span>
+
+<span class="sd">    O access token retornado representa a Service Account associada</span>
+<span class="sd">    ao client autenticado no Keycloak.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        client_id: Identificador público do client no Keycloak.</span>
+<span class="sd">        client_secret: Credencial secreta associada ao client.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dicionário contendo o resultado da autenticação.</span>
+
+<span class="sd">        Em caso de sucesso, contém:</span>
+<span class="sd">            autenticado: Indica que a autenticação foi concluída.</span>
+<span class="sd">            access_token: Access token emitido pelo Keycloak.</span>
+<span class="sd">            expires_in: Tempo de validade do token, em segundos.</span>
+<span class="sd">            token_type: Tipo do token retornado.</span>
+
+<span class="sd">        Em caso de falha, contém:</span>
+<span class="sd">            autenticado: Indica que a autenticação falhou.</span>
+<span class="sd">            erro: Mensagem descritiva da falha.</span>
+<span class="sd">    """</span>
+    <span class="n">keycloak_openid</span> <span class="o">=</span> <span class="n">KeycloakOpenID</span><span class="p">(</span>
+        <span class="n">server_url</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_URL_SERVIDOR</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="n">client_id</span><span class="p">,</span>
+        <span class="n">client_secret_key</span><span class="o">=</span><span class="n">client_secret</span><span class="p">,</span>
+        <span class="n">realm_name</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_VERIFICAR_SSL</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">token</span> <span class="o">=</span> <span class="n">keycloak_openid</span><span class="o">.</span><span class="n">token</span><span class="p">(</span>
+            <span class="n">grant_type</span><span class="o">=</span><span class="s2">"client_credentials"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">KeycloakAuthenticationError</span><span class="p">,</span> <span class="n">KeycloakPostError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"autenticado"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"erro"</span><span class="p">:</span> <span class="n">_obter_erro_autenticacao_client</span><span class="p">(</span><span class="n">exc</span><span class="p">),</span>
+        <span class="p">}</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"autenticado"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"access_token"</span><span class="p">:</span> <span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"access_token"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+        <span class="s2">"expires_in"</span><span class="p">:</span> <span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"expires_in"</span><span class="p">),</span>
+        <span class="s2">"token_type"</span><span class="p">:</span> <span class="n">token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"token_type"</span><span class="p">,</span> <span class="n">_TOKEN_TYPE_BEARER</span><span class="p">),</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="validar_token_client">
+<a class="viewcode-back" href="../../../api.html#apps.autenticacao.keycloak_admin.validar_token_client">[documentos]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validar_token_client</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Valida um access token emitido pelo Keycloak.</span>
+
+<span class="sd">    Valida a assinatura e as claims temporais do JWT utilizando</span>
+<span class="sd">    as configurações do realm do Keycloak.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        token: Access token JWT a ser validado.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dicionário contendo o resultado da validação.</span>
+
+<span class="sd">        Para um token válido, retorna ``valido=True``, as claims</span>
+<span class="sd">        decodificadas e ``expirado=False``.</span>
+
+<span class="sd">        Para um token expirado, retorna ``valido=False`` e</span>
+<span class="sd">        ``expirado=True``.</span>
+
+<span class="sd">        Para outros tokens inválidos, retorna ``valido=False`` e</span>
+<span class="sd">        ``expirado=False``.</span>
+<span class="sd">    """</span>
+    <span class="n">keycloak_openid</span> <span class="o">=</span> <span class="n">KeycloakOpenID</span><span class="p">(</span>
+        <span class="n">server_url</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_URL_SERVIDOR</span><span class="p">,</span>
+        <span class="n">realm_name</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_VERIFICAR_SSL</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">claims</span> <span class="o">=</span> <span class="n">keycloak_openid</span><span class="o">.</span><span class="n">decode_token</span><span class="p">(</span>
+            <span class="n">token</span><span class="p">,</span>
+            <span class="n">validate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">JWTExpired</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"valido"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"expirado"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"claims"</span><span class="p">:</span> <span class="p">{},</span>
+            <span class="s2">"detalhe"</span><span class="p">:</span> <span class="s2">"Token expirado."</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"valido"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"expirado"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"claims"</span><span class="p">:</span> <span class="p">{},</span>
+            <span class="s2">"detalhe"</span><span class="p">:</span> <span class="s2">"Token inválido."</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"valido"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"expirado"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"claims"</span><span class="p">:</span> <span class="n">claims</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_obter_erro_autenticacao_client</span><span class="p">(</span>
+    <span class="n">exc</span><span class="p">:</span> <span class="n">KeycloakAuthenticationError</span> <span class="o">|</span> <span class="n">KeycloakPostError</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Trata um erro do Keycloak em uma mensagem de domínio.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        exc: Exceção retornada pelo Keycloak durante a autenticação.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Mensagem segura e amigável descrevendo a falha.</span>
+<span class="sd">    """</span>
+    <span class="n">erro</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="s2">"client not enabled to retrieve service account"</span> <span class="ow">in</span> <span class="n">erro</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="s2">"O client não está habilitado para autenticação via "</span>
+            <span class="s2">"Client Credentials. Verifique se 'Service Accounts Roles' "</span>
+            <span class="s2">"está habilitado no Keycloak."</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">"invalid_client"</span> <span class="ow">in</span> <span class="n">erro</span> <span class="ow">or</span> <span class="s2">"unauthorized_client"</span> <span class="ow">in</span> <span class="n">erro</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"Client ID ou Client Secret inválidos."</span>
+
+    <span class="k">return</span> <span class="s2">"Não foi possível autenticar o client no Keycloak."</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

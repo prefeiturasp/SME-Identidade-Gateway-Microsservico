@@ -1,0 +1,310 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>apps.core.http_client &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=2346ddef"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/translations.js?v=71a39b36"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="../../../genindex.html" />
+    <link rel="search" title="Buscar" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../autenticacao.html">Autenticação e Níveis de Acesso</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../gestao_usuario.html">Gestão de Usuário</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Código do módulo</a></li>
+      <li class="breadcrumb-item active">apps.core.http_client</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Código-fonte para apps.core.http_client</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Comunicação HTTP com serviços externos."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">cast</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sme_sidecar_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">CircuitOpenError</span><span class="p">,</span> <span class="n">build_http_client</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sme_sidecar_sdk.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">SyncHTTPClient</span>
+
+
+<div class="viewcode-block" id="ServiceClient">
+<a class="viewcode-back" href="../../../api.html#apps.core.http_client.ServiceClient">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ServiceClient</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Executa chamadas HTTP para serviços externos.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        base_url: URL base do serviço externo.</span>
+<span class="sd">        dominio: Nome do domínio associado ao cliente.</span>
+<span class="sd">        api_key: Chave de autenticação enviada ao serviço externo.</span>
+<span class="sd">        api_key_header: Nome do header usado para enviar a chave.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dominio</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">api_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">,</span>
+        <span class="n">api_key_header</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"X-API-Key"</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="n">base_url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dominio</span> <span class="o">=</span> <span class="n">dominio</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_api_key</span> <span class="o">=</span> <span class="n">api_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_api_key_header</span> <span class="o">=</span> <span class="n">api_key_header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">:</span> <span class="n">SyncHTTPClient</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_http_client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncHTTPClient</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Retorna o cliente HTTP persistente.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Cliente HTTP configurado com resiliência e observabilidade.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">build_http_client</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dominio</span><span class="p">,</span>
+                <span class="n">base_url</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="p">,</span>
+                <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_headers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Monta os headers padrão da requisição.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Headers com Accept e API Key quando disponível.</span>
+<span class="sd">        """</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"Accept"</span><span class="p">:</span> <span class="s2">"application/json"</span><span class="p">}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_api_key</span><span class="p">:</span>
+            <span class="n">headers</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_api_key_header</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_api_key</span>
+
+        <span class="k">return</span> <span class="n">headers</span>
+
+<div class="viewcode-block" id="ServiceClient.get">
+<a class="viewcode-back" href="../../../api.html#apps.core.http_client.ServiceClient.get">[documentos]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Executa uma requisição GET.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Caminho relativo da requisição.</span>
+<span class="sd">            params: Parâmetros de query enviados na requisição.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Resposta HTTP recebida do serviço externo.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            httpx.HTTPError: Em caso de falha de transporte ou timeout.</span>
+<span class="sd">        """</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+                <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_http_client</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="n">path</span><span class="p">,</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_headers</span><span class="p">(),</span>
+                    <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">HTTPStatusError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">exc</span><span class="o">.</span><span class="n">response</span>
+        <span class="k">except</span> <span class="n">CircuitOpenError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unavailable_error</span><span class="p">(</span><span class="s2">"GET"</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+
+
+<div class="viewcode-block" id="ServiceClient.post">
+<a class="viewcode-back" href="../../../api.html#apps.core.http_client.ServiceClient.post">[documentos]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Executa uma requisição POST.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Caminho relativo da requisição.</span>
+<span class="sd">            payload: Corpo JSON enviado na requisição.</span>
+<span class="sd">            params: Parâmetros de query enviados na requisição.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Resposta HTTP recebida do serviço externo.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            httpx.HTTPError: Em caso de falha de transporte ou timeout.</span>
+<span class="sd">        """</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+                <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_http_client</span><span class="p">()</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">path</span><span class="p">,</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_headers</span><span class="p">(),</span>
+                    <span class="n">json</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span>
+                    <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">HTTPStatusError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">exc</span><span class="o">.</span><span class="n">response</span>
+        <span class="k">except</span> <span class="n">CircuitOpenError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unavailable_error</span><span class="p">(</span><span class="s2">"POST"</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+
+
+<div class="viewcode-block" id="ServiceClient.put">
+<a class="viewcode-back" href="../../../api.html#apps.core.http_client.ServiceClient.put">[documentos]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">put</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Executa uma requisição PUT.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Caminho relativo da requisição.</span>
+<span class="sd">            payload: Corpo JSON enviado na requisição.</span>
+<span class="sd">            params: Parâmetros de query enviados na requisição.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Resposta HTTP recebida do serviço externo.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            httpx.HTTPError: Em caso de falha de transporte ou timeout.</span>
+<span class="sd">        """</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+                <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_http_client</span><span class="p">()</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                    <span class="n">path</span><span class="p">,</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_headers</span><span class="p">(),</span>
+                    <span class="n">json</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span>
+                    <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">HTTPStatusError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">exc</span><span class="o">.</span><span class="n">response</span>
+        <span class="k">except</span> <span class="n">CircuitOpenError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unavailable_error</span><span class="p">(</span><span class="s2">"PUT"</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+
+
+<div class="viewcode-block" id="ServiceClient.close">
+<a class="viewcode-back" href="../../../api.html#apps.core.http_client.ServiceClient.close">[documentos]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fecha conexões HTTP mantidas pelo cliente."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_unavailable_error</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">httpx</span><span class="o">.</span><span class="n">ConnectError</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Trata circuito aberto para erro de indisponibilidade HTTPX.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            method: Método HTTP da chamada original.</span>
+<span class="sd">            path: Caminho relativo chamado na API.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Erro compatível com os handlers já existentes nas views.</span>
+<span class="sd">        """</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
+            <span class="n">method</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}{</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">httpx</span><span class="o">.</span><span class="n">ConnectError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Circuit breaker aberto para </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dominio</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+            <span class="n">request</span><span class="o">=</span><span class="n">request</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

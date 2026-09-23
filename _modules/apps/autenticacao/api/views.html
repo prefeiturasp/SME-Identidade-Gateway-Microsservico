@@ -1,0 +1,820 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>apps.autenticacao.api.views &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=2346ddef"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/translations.js?v=71a39b36"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="../../../../genindex.html" />
+    <link rel="search" title="Buscar" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../autenticacao.html">Autenticação e Níveis de Acesso</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../gestao_usuario.html">Gestão de Usuário</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Código do módulo</a></li>
+      <li class="breadcrumb-item active">apps.autenticacao.api.views</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Código-fonte para apps.autenticacao.api.views</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Views do fluxo de login e níveis de acesso.</span>
+
+<span class="sd">Endpoints de entrada do Gateway para o domínio de autenticação e</span>
+<span class="sd">autorização. Todas consultam serviços reais: ``LoginView`` e</span>
+<span class="sd">``DadosUsuarioView`` falam com o Keycloak (via</span>
+<span class="sd">``apps.autenticacao.keycloak_admin``, mesmo padrão do comando</span>
+<span class="sd">``validar_login`` do SME-Identidade-ETL); ``LoginView``,</span>
+<span class="sd">``PerfisPorLoginView`` e ``DadosAcessoView`` também consultam a</span>
+<span class="sd">projeção de autorização no SME-Identidade-Token-Microsservico (via</span>
+<span class="sd">``apps.core.clientes.token_ms``), responsável por gerar o token</span>
+<span class="sd">enriquecido a partir dos dados da conta e da projeção do usuário.</span>
+
+<span class="sd">``LoginView`` já devolve a resposta completa numa única chamada</span>
+<span class="sd">(token enriquecido + claims + perfis + permissões), sem exigir uma</span>
+<span class="sd">segunda requisição a ``DadosAcessoView``. As demais views seguem</span>
+<span class="sd">disponíveis para consulta avulsa (ex.: recarregar perfis sem logar</span>
+<span class="sd">de novo).</span>
+
+<span class="sd">Todas as views exigem autenticação via ``AutenticacaoApiKey``, no</span>
+<span class="sd">mesmo padrão usado pelo SME-Identidade-ETL e pelo</span>
+<span class="sd">SME-Identidade-Token-Microsservico.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">drf_spectacular.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenApiParameter</span><span class="p">,</span> <span class="n">OpenApiTypes</span><span class="p">,</span> <span class="n">extend_schema</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">Request</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.response</span><span class="w"> </span><span class="kn">import</span> <span class="n">Response</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.views</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIView</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.autenticacao</span><span class="w"> </span><span class="kn">import</span> <span class="n">keycloak_admin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.autenticacao.api.serializers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ClientTokenRequestSerializer</span><span class="p">,</span>
+    <span class="n">ClientTokenResponseSerializer</span><span class="p">,</span>
+    <span class="n">DadosAcessoResponseSerializer</span><span class="p">,</span>
+    <span class="n">DadosUsuarioResponseSerializer</span><span class="p">,</span>
+    <span class="n">LoginRequestSerializer</span><span class="p">,</span>
+    <span class="n">LoginResponseSerializer</span><span class="p">,</span>
+    <span class="n">LogoutNotificacaoRequestSerializer</span><span class="p">,</span>
+    <span class="n">LogoutRequestSerializer</span><span class="p">,</span>
+    <span class="n">LogoutResponseSerializer</span><span class="p">,</span>
+    <span class="n">OperacaoConfirmadaResponseSerializer</span><span class="p">,</span>
+    <span class="n">PerfisPorLoginResponseSerializer</span><span class="p">,</span>
+    <span class="n">SistemasPorLoginResponseSerializer</span><span class="p">,</span>
+    <span class="n">ValidarClientTokenRequestSerializer</span><span class="p">,</span>
+    <span class="n">ValidarClientTokenResponseSerializer</span><span class="p">,</span>
+    <span class="n">ValidarTokenRequestSerializer</span><span class="p">,</span>
+    <span class="n">ValidarTokenResponseSerializer</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.autenticacao.api_key</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutenticacaoApiKey</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.autenticacao.gatilho_auditoria</span><span class="w"> </span><span class="kn">import</span> <span class="n">disparar_gatilho</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.autenticacao.keycloak_admin</span><span class="w"> </span><span class="kn">import</span> <span class="n">ERRO_USUARIO_NAO_ENCONTRADO</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.core.api_clients</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_api_client</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">apps.core.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">resposta_do_servico</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">_TOKEN_MS_INDISPONIVEL</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"erro"</span><span class="p">:</span> <span class="s2">"token-ms indisponível"</span><span class="p">}</span>
+<span class="n">_TOKEN_MS_TIMEOUT</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"erro"</span><span class="p">:</span> <span class="s2">"token-ms timeout"</span><span class="p">}</span>
+
+<span class="n">_client</span> <span class="o">=</span> <span class="n">get_api_client</span><span class="p">(</span><span class="s2">"token"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_obter_token_enriquecido</span><span class="p">(</span>
+    <span class="n">conta_keycloak</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="n">perfil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Obtém o token enriquecido gerado pelo Token-MS.</span>
+
+<span class="sd">    O Token-MS é responsável por montar e assinar o token</span>
+<span class="sd">    enriquecido. Em caso de indisponibilidade do serviço ou ausência</span>
+<span class="sd">    de dados para o usuário, retorna ``None`` para que o login não</span>
+<span class="sd">    falhe por causa de uma dependência complementar.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        conta_keycloak: Dados da conta autenticada no Keycloak.</span>
+<span class="sd">        perfil: Identificador do perfil selecionado pelo usuário.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Corpo da resposta contendo o token enriquecido e sua data de</span>
+<span class="sd">        expiração, ou ``None`` caso não seja possível obtê-los.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">resposta</span> <span class="o">=</span> <span class="n">_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"/api/v1/token/enriquecido/</span><span class="si">{</span><span class="n">conta_keycloak</span><span class="p">[</span><span class="s1">'kc_user_id'</span><span class="p">]</span><span class="si">}</span><span class="s2">/"</span><span class="p">,</span>
+            <span class="n">payload</span><span class="o">=</span><span class="p">{</span>
+                <span class="o">**</span><span class="n">conta_keycloak</span><span class="p">,</span>
+                <span class="s2">"perfil"</span><span class="p">:</span> <span class="n">perfil</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">corpo</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">resposta</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">corpo</span>
+
+
+<div class="viewcode-block" id="LoginView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.LoginView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LoginView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Autentica um usuário no Keycloak.</span>
+
+<span class="sd">    Equivale à Etapa 1 do fluxo legado</span>
+<span class="sd">    (``POST /api/v1/autenticacao``), mas autentica de verdade contra</span>
+<span class="sd">    o Keycloak — resolve ``login`` (RF, CPF, e-mail ou username) para</span>
+<span class="sd">    a conta real e valida a senha via OpenID Connect (grant type</span>
+<span class="sd">    ``password``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="LoginView.post">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.LoginView.post">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">LoginRequestSerializer</span><span class="p">,</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">LoginResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Recebe login/senha e autentica contra o Keycloak.</span>
+
+<span class="sd">        Resposta completa numa única chamada: além dos tokens OIDC</span>
+<span class="sd">        brutos do Keycloak, solicita ao Token-MS o token</span>
+<span class="sd">        enriquecido já gerado e sua data de expiração —</span>
+<span class="sd">        sem exigir uma segunda requisição a</span>
+<span class="sd">        ``DadosAcessoView``. Ausência de projeção no Token-MS (ou o</span>
+<span class="sd">        serviço fora do ar) não bloqueia o login, já a autenticação</span>
+<span class="sd">        no Keycloak é o que importa: as claims de ``perfis``/</span>
+<span class="sd">        ``permissoes`` dentro do token enriquecido ficam vazias nesse</span>
+<span class="sd">        caso.</span>
+
+<span class="sd">        Autenticado o usuário, dispara também o gatilho de auditoria</span>
+<span class="sd">        — acessório e silencioso em caso de falha, pelo mesmo motivo</span>
+<span class="sd">        que o token enriquecido: o login já aconteceu de verdade no</span>
+<span class="sd">        Keycloak e não deve ser desfeito por uma dependência</span>
+<span class="sd">        complementar.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP com ``login`` e ``senha``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Identidade autenticada + tokens (OIDC e enriquecido);</span>
+<span class="sd">            ``401`` se a senha for inválida; ``204`` (sem corpo) se o</span>
+<span class="sd">            login não existir no Keycloak.</span>
+<span class="sd">        """</span>
+        <span class="n">entrada</span> <span class="o">=</span> <span class="n">LoginRequestSerializer</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">entrada</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">raise_exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">resultado</span> <span class="o">=</span> <span class="n">keycloak_admin</span><span class="o">.</span><span class="n">autenticar</span><span class="p">(</span>
+            <span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"login"</span><span class="p">],</span>
+            <span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"senha"</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">resultado</span><span class="p">[</span><span class="s2">"autenticado"</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">resultado</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"erro"</span><span class="p">)</span> <span class="o">==</span> <span class="n">ERRO_USUARIO_NAO_ENCONTRADO</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">({</span><span class="s2">"detalhe"</span><span class="p">:</span> <span class="n">resultado</span><span class="p">[</span><span class="s2">"erro"</span><span class="p">]},</span> <span class="n">status</span><span class="o">=</span><span class="mi">401</span><span class="p">)</span>
+
+        <span class="n">disparar_gatilho</span><span class="p">(</span>
+            <span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+            <span class="n">resultado</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"kc_user_id"</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">token_enriquecido</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_obter_token_enriquecido</span><span class="p">(</span><span class="n">resultado</span><span class="p">,</span> <span class="n">perfil</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="p">)</span>
+        <span class="n">resultado</span><span class="p">[</span><span class="s2">"token_enriquecido"</span><span class="p">]</span> <span class="o">=</span> <span class="n">token_enriquecido</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"token"</span><span class="p">)</span>
+        <span class="n">resultado</span><span class="p">[</span><span class="s2">"data_expiracao_token_enriquecido"</span><span class="p">]</span> <span class="o">=</span> <span class="n">token_enriquecido</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">"data_expiracao"</span>
+        <span class="p">)</span>
+
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">LoginResponseSerializer</span><span class="p">(</span><span class="n">resultado</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LogoutView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.LogoutView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LogoutView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Encerra a sessão de um usuário no Keycloak.</span>
+
+<span class="sd">    O Gateway não mantém sessão própria — encerrar a sessão depende</span>
+<span class="sd">    de repassar ao Keycloak o ``refresh_token`` obtido no login.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="LogoutView.post">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.LogoutView.post">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">LogoutRequestSerializer</span><span class="p">,</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">LogoutResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Recebe o refresh token e encerra a sessão no Keycloak.</span>
+
+<span class="sd">        Dispara também o gatilho de auditoria, no mesmo padrão do</span>
+<span class="sd">        login — acessório e silencioso em caso de falha.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP com ``refresh_token``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Confirmação do encerramento; ``400`` se o</span>
+<span class="sd">            ``refresh_token`` não vier no corpo.</span>
+<span class="sd">        """</span>
+        <span class="n">entrada</span> <span class="o">=</span> <span class="n">LogoutRequestSerializer</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">entrada</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">raise_exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">resultado</span> <span class="o">=</span> <span class="n">keycloak_admin</span><span class="o">.</span><span class="n">encerrar_sessao</span><span class="p">(</span>
+            <span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"refresh_token"</span><span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="n">disparar_gatilho</span><span class="p">(</span>
+            <span class="n">settings</span><span class="o">.</span><span class="n">KEYCLOAK_REALM</span><span class="p">,</span>
+            <span class="n">resultado</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"kc_user_id"</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">LogoutResponseSerializer</span><span class="p">({</span><span class="s2">"situacao"</span><span class="p">:</span> <span class="s2">"sessao_encerrada"</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="DadosUsuarioView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.DadosUsuarioView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DadosUsuarioView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Retorna dados cadastrais de um usuário, direto no Keycloak.</span>
+
+<span class="sd">    Equivale a ``GET /api/AutenticacaoSgp/{login}/dados``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="DadosUsuarioView.get">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.DadosUsuarioView.get">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">DadosUsuarioResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Retorna os dados cadastrais de um usuário.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP recebida.</span>
+<span class="sd">            login: RF, CPF, e-mail ou username do usuário.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dados cadastrais do usuário, ou 204 (sem corpo) se não</span>
+<span class="sd">            encontrado.</span>
+<span class="sd">        """</span>
+        <span class="n">dados</span> <span class="o">=</span> <span class="n">keycloak_admin</span><span class="o">.</span><span class="n">obter_dados_usuario</span><span class="p">(</span><span class="n">login</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dados</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">DadosUsuarioResponseSerializer</span><span class="p">(</span><span class="n">dados</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolver_conta_keycloak</span><span class="p">(</span><span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve a conta normalizada do Keycloak a partir do login.</span>
+
+<span class="sd">    O SME-Identidade-Token-Microsservico indexa a projeção de</span>
+<span class="sd">    autorização por ``usuario_id`` (UUID igual ao ``kc_user_id`` do</span>
+<span class="sd">    Keycloak) — não por RF/CPF/e-mail como as rotas deste módulo</span>
+<span class="sd">    recebem. Reaproveita ``obter_dados_usuario`` (mesma normalização</span>
+<span class="sd">    usada por ``DadosUsuarioView``) em vez de lidar com o formato</span>
+<span class="sd">    bruto do Keycloak (``attributes`` como listas) em mais de um</span>
+<span class="sd">    lugar — o formato retornado já é o esperado pelo</span>
+<span class="sd">    ``Token-MS``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        login: RF, CPF, e-mail ou username do usuário.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A conta normalizada (``kc_user_id``, ``username``, ``nome``,</span>
+<span class="sd">        ``email``, ``ativo``, ``cpf``, ``rf``), ou ``None`` se o</span>
+<span class="sd">        login não existir no Keycloak.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">keycloak_admin</span><span class="o">.</span><span class="n">obter_dados_usuario</span><span class="p">(</span><span class="n">login</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="PerfisPorLoginView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.PerfisPorLoginView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PerfisPorLoginView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Retorna os perfis de acesso de um usuário.</span>
+
+<span class="sd">    Equivale a</span>
+<span class="sd">    ``GET /api/AutenticacaoSgp/CarregarPerfisPorLogin/{login}``.</span>
+<span class="sd">    Resolve o ``kc_user_id`` no Keycloak e consulta a projeção real</span>
+<span class="sd">    no SME-Identidade-Token-Microsservico.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="PerfisPorLoginView.get">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.PerfisPorLoginView.get">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">parameters</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">OpenApiParameter</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">"sistema_id"</span><span class="p">,</span>
+                <span class="nb">type</span><span class="o">=</span><span class="n">OpenApiTypes</span><span class="o">.</span><span class="n">STR</span><span class="p">,</span>
+                <span class="n">location</span><span class="o">=</span><span class="n">OpenApiParameter</span><span class="o">.</span><span class="n">QUERY</span><span class="p">,</span>
+                <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">description</span><span class="o">=</span><span class="s2">"Identificador do sistema."</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">PerfisPorLoginResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Níveis de Acesso"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Retorna os perfis de acesso vinculados ao login.</span>
+
+<span class="sd">        O parâmetro opcional ``sistema_id`` pode ser informado via query string</span>
+<span class="sd">        para restringir os perfis ao sistema desejado.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP recebida.</span>
+<span class="sd">            login: RF, CPF ou login do usuário.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Lista de perfis de acesso do usuário; 204 (sem corpo) se</span>
+<span class="sd">            o login não existir no Keycloak ou não houver projeção</span>
+<span class="sd">            para ele no Token-MS.</span>
+<span class="sd">        """</span>
+        <span class="n">sistema_id</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sistema_id"</span><span class="p">)</span>
+
+        <span class="n">conta</span> <span class="o">=</span> <span class="n">_resolver_conta_keycloak</span><span class="p">(</span><span class="n">login</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">conta</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="n">sistema_id</span><span class="p">:</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">"sistema_id"</span><span class="p">]</span> <span class="o">=</span> <span class="n">sistema_id</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resposta</span> <span class="o">=</span> <span class="n">_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"/api/v1/perfis/</span><span class="si">{</span><span class="n">conta</span><span class="p">[</span><span class="s1">'kc_user_id'</span><span class="p">]</span><span class="si">}</span><span class="s2">/"</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TimeoutException</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_TIMEOUT</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">504</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TransportError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_INDISPONIVEL</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">resposta_do_servico</span><span class="p">(</span><span class="n">resposta</span><span class="p">)</span>
+
+        <span class="n">projecao</span> <span class="o">=</span> <span class="n">resposta</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">PerfisPorLoginResponseSerializer</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">"rf"</span><span class="p">:</span> <span class="n">projecao</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rf"</span><span class="p">),</span> <span class="s2">"perfis"</span><span class="p">:</span> <span class="n">projecao</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"perfis"</span><span class="p">,</span> <span class="p">[])}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SistemasPorLoginView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.SistemasPorLoginView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SistemasPorLoginView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Retorna os sistemas distintos aos quais um usuário tem acesso.</span>
+
+<span class="sd">    Resolve o ``kc_user_id`` no Keycloak e consulta a lista de</span>
+<span class="sd">    sistemas consolidada pelo SME-Identidade-Token-Microsservico</span>
+<span class="sd">    (``GET /api/v1/perfis/{usuario_id}/sistemas/``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="SistemasPorLoginView.get">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.SistemasPorLoginView.get">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">SistemasPorLoginResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Níveis de Acesso"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Retorna os sistemas distintos vinculados ao login.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP recebida.</span>
+<span class="sd">            login: RF, CPF ou login do usuário.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Lista de sistemas do usuário; 204 (sem corpo) se o login</span>
+<span class="sd">            não existir no Keycloak ou não houver projeção para ele</span>
+<span class="sd">            no Token-MS.</span>
+<span class="sd">        """</span>
+        <span class="n">conta</span> <span class="o">=</span> <span class="n">_resolver_conta_keycloak</span><span class="p">(</span><span class="n">login</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">conta</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resposta</span> <span class="o">=</span> <span class="n">_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"/api/v1/perfis/</span><span class="si">{</span><span class="n">conta</span><span class="p">[</span><span class="s1">'kc_user_id'</span><span class="p">]</span><span class="si">}</span><span class="s2">/sistemas/"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TimeoutException</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_TIMEOUT</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">504</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TransportError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_INDISPONIVEL</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">resposta_do_servico</span><span class="p">(</span><span class="n">resposta</span><span class="p">)</span>
+
+        <span class="n">corpo</span> <span class="o">=</span> <span class="n">resposta</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">SistemasPorLoginResponseSerializer</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">"sistemas"</span><span class="p">:</span> <span class="n">corpo</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sistemas"</span><span class="p">,</span> <span class="p">[])}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="DadosAcessoView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.DadosAcessoView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DadosAcessoView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Retorna o contexto de acesso completo de um usuário/perfil.</span>
+
+<span class="sd">    Equivale a ``GET /api/AutenticacaoSgp/CarregarDadosAcesso/</span>
+<span class="sd">    usuarios/{login}/perfis/{perfil}``.</span>
+
+<span class="sd">    O JWT enriquecido é gerado pelo SME-Identidade-Token-Microsserviço,</span>
+<span class="sd">    que é responsável por buscar a projeção de autorização, compor as</span>
+<span class="sd">    claims e assinar o token.</span>
+
+<span class="sd">    O Gateway apenas solicita o token ao Token-MS e retorna o contexto</span>
+<span class="sd">    de acesso ao cliente.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="DadosAcessoView.get">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.DadosAcessoView.get">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">parameters</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">OpenApiParameter</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">"sistema_id"</span><span class="p">,</span>
+                <span class="nb">type</span><span class="o">=</span><span class="n">OpenApiTypes</span><span class="o">.</span><span class="n">STR</span><span class="p">,</span>
+                <span class="n">location</span><span class="o">=</span><span class="n">OpenApiParameter</span><span class="o">.</span><span class="n">QUERY</span><span class="p">,</span>
+                <span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">description</span><span class="o">=</span><span class="s2">"Identificador do sistema."</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">DadosAcessoResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Níveis de Acesso"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+        <span class="n">login</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">perfil</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Retorna o token enriquecido e as permissões reais do perfil.</span>
+
+<span class="sd">        O parâmetro opcional ``sistema_id`` pode ser informado via query string</span>
+<span class="sd">            para restringir os perfis ao sistema desejado.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP recebida.</span>
+<span class="sd">            login: RF, CPF ou login do usuário.</span>
+<span class="sd">            perfil: Identificador do perfil selecionado.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Token enriquecido e permissões associadas ao perfil; 204</span>
+<span class="sd">            (sem corpo) se o login não existir no Keycloak ou não</span>
+<span class="sd">            houver projeção para ele no Token-MS.</span>
+<span class="sd">        """</span>
+        <span class="n">sistema_id</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sistema_id"</span><span class="p">)</span>
+
+        <span class="n">conta</span> <span class="o">=</span> <span class="n">_resolver_conta_keycloak</span><span class="p">(</span><span class="n">login</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">conta</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resposta</span> <span class="o">=</span> <span class="n">_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"/api/v1/token/enriquecido/</span><span class="si">{</span><span class="n">conta</span><span class="p">[</span><span class="s1">'kc_user_id'</span><span class="p">]</span><span class="si">}</span><span class="s2">/"</span><span class="p">,</span>
+                <span class="n">payload</span><span class="o">=</span><span class="p">{</span>
+                    <span class="o">**</span><span class="n">conta</span><span class="p">,</span>
+                    <span class="s2">"perfil"</span><span class="p">:</span> <span class="n">perfil</span><span class="p">,</span>
+                    <span class="s2">"sistema_id"</span><span class="p">:</span> <span class="n">sistema_id</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TimeoutException</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_TIMEOUT</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">504</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TransportError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_INDISPONIVEL</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="mi">204</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">resposta</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">resposta_do_servico</span><span class="p">(</span><span class="n">resposta</span><span class="p">)</span>
+
+        <span class="n">dados_token</span> <span class="o">=</span> <span class="n">resposta</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">DadosAcessoResponseSerializer</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">"token"</span><span class="p">:</span> <span class="n">dados_token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"token"</span><span class="p">),</span>
+                <span class="s2">"data_expiracao_token"</span><span class="p">:</span> <span class="n">dados_token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"data_expiracao"</span><span class="p">),</span>
+                <span class="s2">"permissoes"</span><span class="p">:</span> <span class="n">dados_token</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="s2">"permissoes"</span><span class="p">,</span>
+                    <span class="p">[],</span>
+                <span class="p">),</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ValidarTokenView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.ValidarTokenView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidarTokenView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Valida um token enriquecido, sem exigir decodificação no cliente.</span>
+
+<span class="sd">    O Gateway é quem devolve o ``token_enriquecido`` no login — faz</span>
+<span class="sd">    sentido também ser o ponto de entrada para validá-lo depois,</span>
+<span class="sd">    sem o consumidor precisar saber que quem assina de fato é o</span>
+<span class="sd">    Token-MS nem chamá-lo diretamente.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="ValidarTokenView.post">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.ValidarTokenView.post">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">ValidarTokenRequestSerializer</span><span class="p">,</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">ValidarTokenResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Repassa o token ao Token-MS e devolve o resultado da validação.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP com ``token``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``{"valido", "expirado", "claims"}`` — mesmo contrato do</span>
+<span class="sd">            Token-MS, repassado sem transformação.</span>
+<span class="sd">        """</span>
+        <span class="n">entrada</span> <span class="o">=</span> <span class="n">ValidarTokenRequestSerializer</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">entrada</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">raise_exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resposta</span> <span class="o">=</span> <span class="n">_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                <span class="s2">"/api/v1/token/validar/"</span><span class="p">,</span>
+                <span class="n">payload</span><span class="o">=</span><span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TimeoutException</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_TIMEOUT</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">504</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">TransportError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">_TOKEN_MS_INDISPONIVEL</span><span class="p">,</span> <span class="n">status</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">resposta_do_servico</span><span class="p">(</span><span class="n">resposta</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LogoutNotificacaoView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.LogoutNotificacaoView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LogoutNotificacaoView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Recebe notificações de logout global do SSO-Microsservico.</span>
+
+<span class="sd">    Endpoint de teste E2E do mecanismo de logout global do SSO-MS:</span>
+<span class="sd">    quando uma sessão compartilhada é encerrada, o SSO-MS notifica em</span>
+<span class="sd">    paralelo cada sistema conectado. O Gateway não mantém sessão</span>
+<span class="sd">    própria (ver ``LogoutView``), então apenas confirma o recebimento</span>
+<span class="sd">    da notificação, sem invalidar nada localmente.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="LogoutNotificacaoView.post">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.LogoutNotificacaoView.post">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">LogoutNotificacaoRequestSerializer</span><span class="p">,</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">OperacaoConfirmadaResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Registra o recebimento de uma notificação de logout global.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP com ``sessao_id``, ``login`` e</span>
+<span class="sd">                ``kc_user_id``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Confirmação do recebimento da notificação.</span>
+<span class="sd">        """</span>
+        <span class="n">entrada</span> <span class="o">=</span> <span class="n">LogoutNotificacaoRequestSerializer</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">entrada</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">raise_exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">"Notificação de logout global recebida: login=</span><span class="si">%s</span><span class="s2"> sessao_id=</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+            <span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"login"</span><span class="p">],</span>
+            <span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"sessao_id"</span><span class="p">],</span>
+        <span class="p">)</span>
+
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">OperacaoConfirmadaResponseSerializer</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">"situacao"</span><span class="p">:</span> <span class="s2">"notificacao_recebida"</span><span class="p">}</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ClientTokenView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.ClientTokenView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ClientTokenView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Autentica um sistema no Keycloak via Client Credentials.</span>
+
+<span class="sd">    Expõe o fluxo de autenticação machine-to-machine, independente</span>
+<span class="sd">    da autenticação de usuários.</span>
+
+<span class="sd">    O endpoint recebe ``client_id`` e ``client_secret`` e retorna</span>
+<span class="sd">    o access token emitido pelo Keycloak para a Service Account</span>
+<span class="sd">    associada ao client.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="ClientTokenView.post">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.ClientTokenView.post">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">ClientTokenRequestSerializer</span><span class="p">,</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">ClientTokenResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Obtém um access token utilizando Client Credentials.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP contendo ``client_id`` e</span>
+<span class="sd">                ``client_secret``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Resposta HTTP contendo ``access_token``, ``token_type`` e</span>
+<span class="sd">            ``expires_in`` quando a autenticação for bem-sucedida.</span>
+<span class="sd">            Retorna HTTP 401 quando o client não puder ser autenticado.</span>
+<span class="sd">        """</span>
+        <span class="n">entrada</span> <span class="o">=</span> <span class="n">ClientTokenRequestSerializer</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">entrada</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">raise_exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">resultado</span> <span class="o">=</span> <span class="n">keycloak_admin</span><span class="o">.</span><span class="n">autenticar_client</span><span class="p">(</span>
+            <span class="n">client_id</span><span class="o">=</span><span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"client_id"</span><span class="p">],</span>
+            <span class="n">client_secret</span><span class="o">=</span><span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"client_secret"</span><span class="p">],</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">resultado</span><span class="p">[</span><span class="s2">"autenticado"</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">Response</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">"detalhe"</span><span class="p">:</span> <span class="n">resultado</span><span class="p">[</span><span class="s2">"erro"</span><span class="p">],</span>
+                <span class="p">},</span>
+                <span class="n">status</span><span class="o">=</span><span class="mi">401</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">ClientTokenResponseSerializer</span><span class="p">(</span><span class="n">resultado</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ValidarClientTokenView">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.ValidarClientTokenView">[documentos]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidarClientTokenView</span><span class="p">(</span><span class="n">APIView</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Valida um access token emitido pelo Keycloak.</span>
+
+<span class="sd">    O endpoint recebe um access token e verifica sua validade por meio</span>
+<span class="sd">    das configurações do realm do Keycloak.</span>
+<span class="sd">    """</span>
+
+    <span class="n">authentication_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">AutenticacaoApiKey</span><span class="p">]</span>
+
+<div class="viewcode-block" id="ValidarClientTokenView.post">
+<a class="viewcode-back" href="../../../../api.html#apps.autenticacao.api.views.ValidarClientTokenView.post">[documentos]</a>
+    <span class="nd">@extend_schema</span><span class="p">(</span>
+        <span class="n">request</span><span class="o">=</span><span class="n">ValidarClientTokenRequestSerializer</span><span class="p">,</span>
+        <span class="n">responses</span><span class="o">=</span><span class="n">ValidarClientTokenResponseSerializer</span><span class="p">,</span>
+        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Autenticação"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Valida um access token de autenticação entre sistemas.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            request: Requisição HTTP contendo o access token a ser</span>
+<span class="sd">                validado.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Resposta HTTP informando se o token é válido, se está</span>
+<span class="sd">            expirado e, quando disponíveis, suas claims.</span>
+<span class="sd">        """</span>
+        <span class="n">entrada</span> <span class="o">=</span> <span class="n">ValidarClientTokenRequestSerializer</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">entrada</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">raise_exception</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">resultado</span> <span class="o">=</span> <span class="n">keycloak_admin</span><span class="o">.</span><span class="n">validar_token_client</span><span class="p">(</span>
+            <span class="n">token</span><span class="o">=</span><span class="n">entrada</span><span class="o">.</span><span class="n">validated_data</span><span class="p">[</span><span class="s2">"token"</span><span class="p">],</span>
+        <span class="p">)</span>
+
+        <span class="n">saida</span> <span class="o">=</span> <span class="n">ValidarClientTokenResponseSerializer</span><span class="p">(</span><span class="n">resultado</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">saida</span><span class="o">.</span><span class="n">data</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

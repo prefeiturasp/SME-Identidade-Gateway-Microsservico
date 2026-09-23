@@ -1,0 +1,301 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestão de Usuário &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2346ddef"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/translations.js?v=71a39b36"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="genindex.html" />
+    <link rel="search" title="Buscar" href="search.html" />
+    <link rel="next" title="Referência de código" href="api.html" />
+    <link rel="prev" title="Autenticação e Níveis de Acesso" href="autenticacao.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="autenticacao.html">Autenticação e Níveis de Acesso</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Gestão de Usuário</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#endpoints">Endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#criar-usuario">Criar usuário</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#sincronizar-usuario">Sincronizar usuário</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#conceder-acesso">Conceder acesso</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#consultar-identidade">Consultar identidade</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tratamento-de-erros-de-comunicacao">Tratamento de erros de comunicação</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuracao">Configuração</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Gestão de Usuário</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/gestao_usuario.md.txt" rel="nofollow"> Ver código-fonte da página</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="gestao-de-usuario">
+<h1>Gestão de Usuário<a class="headerlink" href="#gestao-de-usuario" title="Link para este cabeçalho"></a></h1>
+<p>Definido em <code class="docutils literal notranslate"><span class="pre">apps/gestao_usuario/</span></code>. Camada fina de entrada: autentica a
+requisição via <code class="docutils literal notranslate"><span class="pre">AutenticacaoApiKey</span></code>, valida o payload e repassa ao
+SME-Identidade-ETL, que é quem de fato fala com o Keycloak Admin API.
+<strong>Nenhuma lógica de upsert, idempotência ou provisionamento é
+reimplementada aqui</strong> — o Gateway só roteia.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Cliente → Gateway (autentica, valida entrada, roteia) → ETL (lógica real, fala com Keycloak) → Keycloak
+</pre></div>
+</div>
+<p>Rotas registradas sob <code class="docutils literal notranslate"><span class="pre">identidade-gateway/api/v1/usuarios/</span></code>.</p>
+<hr class="docutils" />
+<section id="endpoints">
+<h2>Endpoints<a class="headerlink" href="#endpoints" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Método</p></th>
+<th class="head"><p>Endpoint</p></th>
+<th class="head"><p>Repassa para (ETL)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/identidade-etl/api/v1/etl/usuario/criar/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/sincronizar/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/identidade-etl/api/v1/etl/usuario/sincronizar/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/conceder-acesso/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/identidade-etl/api/v1/etl/usuario/conceder-acesso/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/consultar/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/identidade-etl/api/v1/etl/identidades/consultar/</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Os nomes de campo dos payloads espelham exatamente os serializers
+equivalentes do ETL — não há tradução de contrato.</p>
+</section>
+<hr class="docutils" />
+<section id="criar-usuario">
+<h2>Criar usuário<a class="headerlink" href="#criar-usuario" title="Link para este cabeçalho"></a></h2>
+<p>Cria um usuário no Keycloak a partir de dados diretos — <strong>não depende do
+usuário já existir no CoreSSO</strong>. <code class="docutils literal notranslate"><span class="pre">sistema</span></code>/<code class="docutils literal notranslate"><span class="pre">roles</span></code> são opcionais: quando
+informados juntos, o ETL concede o acesso na mesma chamada de criação.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"nome"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Fulano de Tal"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"cpf"</span><span class="p">:</span><span class="w"> </span><span class="s2">"12345678900"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"email"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fulano@externo.com"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"tipo_usuario"</span><span class="p">:</span><span class="w"> </span><span class="s2">"terceiro"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"sistema"</span><span class="p">:</span><span class="w"> </span><span class="mi">1008</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"roles"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"COTIC"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"realm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sme-apps"</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Validações antes de chamar o ETL:</p>
+<ul class="simple">
+<li><p>É exigido ao menos <code class="docutils literal notranslate"><span class="pre">cpf</span></code> ou <code class="docutils literal notranslate"><span class="pre">rf</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sistema</span></code> e <code class="docutils literal notranslate"><span class="pre">roles</span></code> devem vir juntos, ou nenhum dos dois — informar
+apenas um dos dois retorna <code class="docutils literal notranslate"><span class="pre">400</span></code> sem chamar o ETL</p></li>
+</ul>
+<p><strong>Retorno (exemplo com concessão de acesso):</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"acao"</span><span class="p">:</span><span class="w"> </span><span class="s2">"criado"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"kc_user_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"6dbda0a5-..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"hash_conteudo"</span><span class="p">:</span><span class="w"> </span><span class="s2">"42e9e153..."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"sistema"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Auto Serviço"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"client_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"auto-servico-qa"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"roles_atribuidos"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"COTIC"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"roles_nao_encontrados"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+<span class="w">  </span><span class="nt">"erros"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="sincronizar-usuario">
+<h2>Sincronizar usuário<a class="headerlink" href="#sincronizar-usuario" title="Link para este cabeçalho"></a></h2>
+<p>Sincroniza um usuário <strong>existente no CoreSSO</strong> com o Keycloak, atribuindo
+todos os roles de todos os sistemas aos quais ele já pertence.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"identificador"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span><span class="w"> </span><span class="nt">"realm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sme-apps"</span><span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="conceder-acesso">
+<h2>Conceder acesso<a class="headerlink" href="#conceder-acesso" title="Link para este cabeçalho"></a></h2>
+<p>Concede acesso a um sistema e roles específicos, independentemente dos
+vínculos reais no CoreSSO.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"identificador"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1234567"</span><span class="p">,</span><span class="w"> </span><span class="nt">"sistema"</span><span class="p">:</span><span class="w"> </span><span class="mi">1008</span><span class="p">,</span><span class="w"> </span><span class="nt">"roles"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"COTIC"</span><span class="p">]}</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="consultar-identidade">
+<h2>Consultar identidade<a class="headerlink" href="#consultar-identidade" title="Link para este cabeçalho"></a></h2>
+<p>Consulta a conta do usuário <strong>diretamente no Keycloak</strong> (o ETL repassa
+para <code class="docutils literal notranslate"><span class="pre">identidades/consultar/</span></code>, que busca via Keycloak Admin API — não é
+mais uma leitura de cache local). Reflete o estado real,
+independentemente de qual rota criou o usuário.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>GET /consultar/?cpf=12345678900
+GET /consultar/?rf=1234567
+GET /consultar/?email=fulano@sme.sp.gov.br
+</pre></div>
+</div>
+<p><strong>Retorno:</strong></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"kc_user_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"5c29cc47-..."</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"username"</span><span class="p">:</span><span class="w"> </span><span class="s2">"7376065"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"nome"</span><span class="p">:</span><span class="w"> </span><span class="s2">"MONICA CARVALHO TANG"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"email"</span><span class="p">:</span><span class="w"> </span><span class="s2">"monica.tang@sme.prefeitura.sp.gov.br"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"ativo"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"cpf"</span><span class="p">:</span><span class="w"> </span><span class="s2">"26930618810"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"rf"</span><span class="p">:</span><span class="w"> </span><span class="s2">"7376065"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"kc_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://kc/.../users/.../settings"</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="tratamento-de-erros-de-comunicacao">
+<h2>Tratamento de erros de comunicação<a class="headerlink" href="#tratamento-de-erros-de-comunicacao" title="Link para este cabeçalho"></a></h2>
+<p>Todas as views tratam falhas ao chamar o ETL:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Situação</p></th>
+<th class="head"><p>Status retornado</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>ETL responde com erro (ex.: usuário não encontrado no CoreSSO)</p></td>
+<td><p>Status/corpo do ETL repassado como veio</p></td>
+</tr>
+<tr class="row-odd"><td><p>ETL não responde a tempo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">504</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>ETL inacessível (conexão recusada)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">502</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<hr class="docutils" />
+<section id="configuracao">
+<h2>Configuração<a class="headerlink" href="#configuracao" title="Link para este cabeçalho"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variável</p></th>
+<th class="head"><p>Padrão</p></th>
+<th class="head"><p>Descrição</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ETL_URL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://identidade-etl:8000</span></code></p></td>
+<td><p>URL base do SME-Identidade-ETL</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ETL_TIMEOUT</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">30</span></code></p></td>
+<td><p>Timeout em segundos das chamadas ao ETL</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_ETL</span></code></p></td>
+<td><p>—</p></td>
+<td><p>API Key própria da comunicação Gateway → ETL</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">API_KEY_ETL_HEADER</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">X-API-Key</span></code></p></td>
+<td><p>Header onde a chave é enviada ao ETL</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">API_KEY_ETL</span></code> é distinta da <code class="docutils literal notranslate"><span class="pre">API_KEY</span></code> que os clientes usam para chamar o
+Gateway — deve corresponder ao <code class="docutils literal notranslate"><span class="pre">API_KEY</span></code> configurado no SME-Identidade-ETL.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Rodapé">
+        <a href="autenticacao.html" class="btn btn-neutral float-left" title="Autenticação e Níveis de Acesso" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Anterior</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="Referência de código" accesskey="n" rel="next">Próximo <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

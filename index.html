@@ -1,0 +1,146 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="pt-BR" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SME Identidade Gateway Microsserviço &mdash; SME-Identidade-Gateway-Microsservico</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2346ddef"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/translations.js?v=71a39b36"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="genindex.html" />
+    <link rel="search" title="Buscar" href="search.html" />
+    <link rel="next" title="Autenticação e Níveis de Acesso" href="autenticacao.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            SME-Identidade-Gateway-Microsservico
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Pesquisar documentos" aria-label="Pesquisar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Menu de navegação">
+              <p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="autenticacao.html">Autenticação e Níveis de Acesso</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gestao_usuario.html">Gestão de Usuário</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Referência de código</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Menu de navegação móvel" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">SME-Identidade-Gateway-Microsservico</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Navegação da página">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">SME Identidade Gateway Microsserviço</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.md.txt" rel="nofollow"> Ver código-fonte da página</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="sme-identidade-gateway-microsservico">
+<h1>SME Identidade Gateway Microsserviço<a class="headerlink" href="#sme-identidade-gateway-microsservico" title="Link para este cabeçalho"></a></h1>
+<p>Documentação técnica do serviço responsável pela centralização das capacidades de autenticação, validação de identidade e propagação segura de contexto autenticado para aplicações e microsserviços da plataforma SME.</p>
+<p>O microsserviço atua como camada transversal de autenticação e integração com provedores de identidade corporativos, garantindo padronização de acesso, rastreabilidade e segurança operacional.</p>
+<p>Sua função é validar identidades, processar credenciais, propagar contexto autenticado entre serviços e apoiar a aplicação consistente de políticas de segurança em toda a plataforma. Também expõe a gestão de usuário (criação, sincronização e concessão de acesso), delegando a lógica de provisionamento ao SME-Identidade-ETL.</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Conteúdo</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="autenticacao.html">Autenticação e Níveis de Acesso</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#login-e-dados-do-usuario-real-keycloak">Login e dados do usuário (real — Keycloak)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#logout-real-keycloak">Logout (real — Keycloak)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#niveis-de-acesso-real-token-ms">Níveis de acesso (real — Token-MS)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#gestao-de-credencial-real-keycloak">Gestão de credencial (real — Keycloak)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#aviso-de-atividade-ao-audit-ms">Aviso de atividade ao Audit-MS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#configuracao">Configuração</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#logout-global-endpoint-de-recepcao-sme-identidade-sso-microsservico">Logout global (endpoint de recepção — SME-Identidade-SSO-Microsservico)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autenticacao.html#autenticacao-entre-clients-real-keycloak">Autenticação entre clients (real — Keycloak)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gestao_usuario.html">Gestão de Usuário</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#endpoints">Endpoints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#criar-usuario">Criar usuário</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#sincronizar-usuario">Sincronizar usuário</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#conceder-acesso">Conceder acesso</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#consultar-identidade">Consultar identidade</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#tratamento-de-erros-de-comunicacao">Tratamento de erros de comunicação</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gestao_usuario.html#configuracao">Configuração</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Referência de código</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-apps.core.api.views">Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-apps.autenticacao.api_key">Autenticação</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-apps.gestao_usuario.cliente_etl">Gestão de Usuário</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Rodapé">
+        <a href="autenticacao.html" class="btn btn-neutral float-right" title="Autenticação e Níveis de Acesso" accesskey="n" rel="next">Próximo <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Direitos autorais .</p>
+  </div>
+
+  Compilado com <a href="https://www.sphinx-doc.org/">Sphinx</a> usando um
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    fornecido por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
