@@ -20,7 +20,7 @@ pipeline {
         DOCKER_REGISTRY_CREDENTIAL_ID = 'svc_jenkins'
         DOCKER_REGISTRY_URL = credentials('registryEndpoint')
         CYPRESS_AGENT_IMAGE = "${DOCKER_REGISTRY_URL}/devops/cypress-agent:14.5.2"
-        CYPRESS_ENV_CREDENTIAL_ID = 'cypress_env_pedagogico_transgw_ms'
+        CYPRESS_ENV_CREDENTIAL_ID = 'cypress_env_identidade_gateway_ms'
         CYPRESS_RECORD_KEY = 'somekey'
         CI_BUILD_ID_PREFIX = 'SME-Identidade -TransitionGateway-Microsservico'
         TELEGRAM_TOKEN_CREDENTIAL_ID = 'telegramTokensigpae'
