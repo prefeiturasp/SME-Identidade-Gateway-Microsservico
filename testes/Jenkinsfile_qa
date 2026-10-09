@@ -22,7 +22,7 @@ pipeline {
         CYPRESS_AGENT_IMAGE = "${DOCKER_REGISTRY_URL}/devops/cypress-agent:14.5.2"
         CYPRESS_ENV_CREDENTIAL_ID = 'cypress_env_identidade_gateway_ms'
         CYPRESS_RECORD_KEY = 'somekey'
-        CI_BUILD_ID_PREFIX = 'SME-Identidade -TransitionGateway-Microsservico'
+        CI_BUILD_ID_PREFIX = 'SME-Identidade-TransitionGateway-Microsservico'
         TELEGRAM_TOKEN_CREDENTIAL_ID = 'telegramTokensigpae'
         TELEGRAM_CHATID_CREDENTIAL_ID = 'telegramChatIdsigpae'
         // ---------------------------------------------------------------
