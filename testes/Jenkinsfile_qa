@@ -1,0 +1,168 @@
+pipeline {
+    agent {
+        label 'cypress-node'
+    }
+
+    triggers {
+        cron('30 20 * * 0-5')
+    }
+
+    options {
+        ansiColor('xterm')
+        buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
+        disableConcurrentBuilds()
+        skipDefaultCheckout()
+    }
+
+    environment {
+        TESTES_DIR = 'testes'
+        ALLURE_RESULTS_PATH = 'testes/allure-results'
+        DOCKER_REGISTRY_CREDENTIAL_ID = 'svc_jenkins'
+        DOCKER_REGISTRY_URL = credentials('registryEndpoint')
+        CYPRESS_AGENT_IMAGE = "${DOCKER_REGISTRY_URL}/devops/cypress-agent:14.5.2"
+        CYPRESS_ENV_CREDENTIAL_ID = 'cypress_env_pedagogico_transgw_ms'
+        CYPRESS_RECORD_KEY = 'somekey'
+        CI_BUILD_ID_PREFIX = 'SME-IntegracaoEOL-TransitionGateway-Microsservico'
+        TELEGRAM_TOKEN_CREDENTIAL_ID = 'telegramTokensigpae'
+        TELEGRAM_CHATID_CREDENTIAL_ID = 'telegramChatIdsigpae'
+        // ---------------------------------------------------------------
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Executar') {
+            steps {
+                script {
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        withDockerRegistry(credentialsId: "${DOCKER_REGISTRY_CREDENTIAL_ID}", url: "https://${DOCKER_REGISTRY_URL}") {
+                            withCredentials([file(credentialsId: "${CYPRESS_ENV_CREDENTIAL_ID}", variable: 'env')]){
+                                sh '''
+                                    touch ${TESTES_DIR}/.env
+                                    cp "$env" "${TESTES_DIR}/.env"
+                                    docker pull ${CYPRESS_AGENT_IMAGE}
+                                    docker run \
+                                        --rm \
+                                        -v "$WORKSPACE/$TESTES_DIR:/app" \
+                                        -w /app \
+                                        ${CYPRESS_AGENT_IMAGE} \
+                                        sh -c "rm -rf allure-results && \
+                                            npm install && \
+                                            npm install cypress@14.5.2 cypress-cloud@beta \
+                                            @shelex/cypress-allure-plugin allure-mocha crypto-js@4.1.1 --save-dev && \
+                                            npx cypress-cloud run \
+                                                    --parallel \
+                                                    --browser chrome \
+                                                    --headed true \
+                                                    --record \
+                                                    --key ${CYPRESS_RECORD_KEY} \
+                                                    --env allure=true \
+                                                    --ci-build-id ${CI_BUILD_ID_PREFIX}_JENKINS-BUILD-${BUILD_NUMBER}; \
+                                            STATUS=\\$?; \
+                                            chown 1001:1001 * -R; \
+                                            chmod 777 * -R; \
+                                            exit \\$STATUS"
+                                '''
+                            }
+                        }
+                    }
+                    echo "Testes Cypress finalizados."
+                    def logText = currentBuild.rawBuild.getLog(20).join('\n')
+                    def match = logText =~ /Recorded Run:\s*(https?:\/\/\S+)/
+                    if (match) {
+                        env.CYPRESS_RUN_URL = match[0][1]
+                    }
+                }
+            }
+        }
+
+        stage('Gerar Relatório Allure') {
+            steps {
+                script {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                        def hasResults = fileExists("${ALLURE_RESULTS_PATH}") && sh(script: "ls -A ${ALLURE_RESULTS_PATH} | wc -l", returnStdout: true).trim() != "0"
+
+                        if (hasResults) {
+                            echo "📊 Gerando relatório Allure..."
+                            sh """
+                                export JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java)))); \
+                                export PATH=\$JAVA_HOME/bin:/usr/local/bin:\$PATH; \
+                                allure generate ${ALLURE_RESULTS_PATH} --clean --output ${TESTES_DIR}/allure-report; \
+                                cd ${TESTES_DIR}; \
+                                zip -r allure-results-${BUILD_NUMBER}-\$(date +"%d-%m-%Y").zip allure-results
+                            """
+                        } else {
+                            echo "⚠️ Nenhum resultado Allure encontrado em ${ALLURE_RESULTS_PATH}."
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                withDockerRegistry(credentialsId: "${DOCKER_REGISTRY_CREDENTIAL_ID}", url: "https://${DOCKER_REGISTRY_URL}") {
+                    sh '''
+                        docker pull ${CYPRESS_AGENT_IMAGE}
+                        docker run \
+                            --rm \
+                            -v "$WORKSPACE:/app" \
+                            -w /app \
+                            ${CYPRESS_AGENT_IMAGE} \
+                            sh -c "rm -rf package-lock.json node_modules/ || true && \
+                                (ls -t testes/allure-results-*.zip 2>/dev/null | tail -n +11 | xargs -r rm -f) || true && \
+                                chown 1001:1001 * -R || true  && chmod 777 * -R || true"
+                    '''
+                }
+
+                if (fileExists("${ALLURE_RESULTS_PATH}") && sh(script: "ls -A ${ALLURE_RESULTS_PATH} | wc -l", returnStdout: true).trim() != "0") {
+                    allure includeProperties: false, jdk: '', results: [[path: "${ALLURE_RESULTS_PATH}"]]
+                } else {
+                    echo "⚠️ Resultados do Allure não encontrados ou vazios, plugin não será acionado."
+                }
+
+                def zipExists = sh(script: "ls testes/allure-results-*.zip 2>/dev/null || true", returnStdout: true).trim()
+                if (zipExists) {
+                    archiveArtifacts artifacts: 'testes/allure-results-*.zip', fingerprint: true
+                } else {
+                    echo "⚠️ Nenhum .zip de Allure encontrado para arquivamento."
+                }
+            }
+        }
+
+        success { sendTelegram("<b>SUCESSO! ✅</b>") }
+        unstable { sendTelegram("<b>INSTÁVEL! ⚠️</b>") }
+        failure { sendTelegram("<b>FALHA! ❌</b>\n") }
+        aborted { sendTelegram("<b>CANCELADO! ✖️</b>\n") }
+        cleanup { cleanWs() }
+    }
+}
+
+
+def sendTelegram(message) {
+    def messageTemplate = (
+        "<b>Job Name:</b> <a href='${JOB_URL}'>${JOB_NAME}</a>\n\n" +
+        "<b>Status:</b> ${message}\n" +
+        "<b>Build Number:</b> ${BUILD_DISPLAY_NAME}\n" +
+        "<b>Dashboard Link:</b> <a href='${env.CYPRESS_RUN_URL}'>Resultados no dashboard</a>\n" +
+        "<b>Log:</b> <a href='${env.BUILD_URL}console'>Ver console output</a>"
+    )
+
+    def encodedMessage = URLEncoder.encode(messageTemplate, "UTF-8")
+
+    withCredentials([string(credentialsId: env.TELEGRAM_TOKEN_CREDENTIAL_ID, variable: 'TOKEN'),
+    string(credentialsId: env.TELEGRAM_CHATID_CREDENTIAL_ID, variable: 'CHAT_ID')]) {
+        response = httpRequest (consoleLogResponseBody: true,
+            contentType: 'APPLICATION_JSON',
+            httpMode: 'GET',
+            url: 'https://api.telegram.org/bot'+"$TOKEN"+'/sendMessage?text='+encodedMessage+'&chat_id='+"$CHAT_ID"+'&parse_mode='+"HTML"+'&disable_web_page_preview=true',
+            validResponseCodes: '200')
+        return response
+    }
+}
