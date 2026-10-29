@@ -32,7 +32,14 @@ const envKeys = [
   "USUARIO_RF",
   "USUARIO_KC_USER_ID",
   "USUARIO_PERFIL",
+  "ADMIN_URL",
+  "ADMIN_LOGIN",
+  "ADMIN_PASSWORD",
 ];
+
+const adminUiConfigured = ["ADMIN_URL", "ADMIN_LOGIN", "ADMIN_PASSWORD"].every(
+  (key) => Boolean(process.env[key]),
+);
 
 export default defineConfig({
   e2e: {
@@ -64,7 +71,7 @@ export default defineConfig({
     env: {
       allure: true,
       // IGNORA TAGS @ignore
-      TAGS: "not @ignore",
+      TAGS: adminUiConfigured ? "not @ignore" : "not @ignore and not @admin-ui",
     },
 
     async setupNodeEvents(on, config) {
