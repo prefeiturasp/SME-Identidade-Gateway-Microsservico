@@ -25,6 +25,14 @@ When("realizo login sem informar o login", () => {
   cy.postLogin({ omitirLogin: true }).as("response");
 });
 
+When("realizo login com senha vazia", () => {
+  cy.postLogin({ senha: "" }).as("response");
+});
+
+When("realizo login com login vazio", () => {
+  cy.postLogin({ login: "" }).as("response");
+});
+
 When("realizo login sem informar a API Key", () => {
   cy.postLogin({ omitirApiKey: true }).as("response");
 });
@@ -66,6 +74,10 @@ When("realizo logout sem informar o refresh token", () => {
   cy.postLogout(undefined).as("response");
 });
 
+When("realizo logout com refresh token vazio", () => {
+  cy.postLogout("").as("response");
+});
+
 When("realizo logout sem informar a API Key", () => {
   cy.postLogout(REFRESH_TOKEN_INVALIDO, { omitirApiKey: true }).as(
     "response",
@@ -97,6 +109,10 @@ And("o retorno deve confirmar o encerramento da sessão", () => {
 
 When("valido o token enriquecido sem informar o token", () => {
   cy.postValidarToken(undefined).as("response");
+});
+
+When("valido o token enriquecido vazio", () => {
+  cy.postValidarToken("").as("response");
 });
 
 When("valido o token enriquecido sem informar a API Key", () => {
