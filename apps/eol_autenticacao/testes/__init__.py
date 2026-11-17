@@ -1,1 +1,1 @@
-"""Testes da compatibilidade com a autenticação legada do EOL."""
+"""Testes da compatibilidade com a autenticação legada."""

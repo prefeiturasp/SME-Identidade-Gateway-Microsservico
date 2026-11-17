@@ -1,1 +1,1 @@
-"""API de compatibilidade com a autenticação legada do EOL."""
+"""API de compatibilidade com a autenticação legada."""

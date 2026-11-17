@@ -1,1 +1,1 @@
-"""Contratos de entrada e saída da autenticação legada do EOL."""
+"""Contratos de entrada e saída da autenticação legada."""

@@ -1,4 +1,4 @@
-"""Caminhos completos dos endpoints legados de autenticação do EOL."""
+"""Caminhos completos dos endpoints legados de autenticação."""
 
 from django.urls import URLPattern
 
