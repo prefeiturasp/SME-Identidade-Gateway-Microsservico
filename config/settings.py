@@ -25,6 +25,8 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.autenticacao",
     "apps.gestao_usuario",
+    "apps.eol_autenticacao_sgp",
+    "apps.eol_autenticacao",
 ]
 
 MIDDLEWARE = [
