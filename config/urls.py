@@ -5,8 +5,6 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import AllowAny
 
 API_PREFIX = "identidade-gateway/api/v1/"
-EOL_AUTENTICA_SGP_PREFIX = "/api/autenticacaoSgp/"
-EOL_AUTENTICA_PREFIX = "/api/v1/autenticacao/"
 
 urlpatterns = [
     path(
@@ -37,10 +35,11 @@ urlpatterns = [
     ),
     # Apps de Compatibilidade com o Legado
     path(
-        f"{EOL_AUTENTICA_SGP_PREFIX}",
+        f"{API_PREFIX}eol-autenticacao-sgp/",
         include("apps.eol_autenticacao_sgp.api.urls"),
     ),
-    path(f"{EOL_AUTENTICA_PREFIX}",
-        include("apps.eol_autenticacao.api.urls"),
+    path(
+        f"{API_PREFIX}eol-autenticacao/",
+        include("apps.eol_autenticacao_sgp.api.urls"),
     ),
 ]
