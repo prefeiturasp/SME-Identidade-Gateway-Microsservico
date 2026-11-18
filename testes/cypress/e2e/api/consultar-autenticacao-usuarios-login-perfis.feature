@@ -49,3 +49,7 @@ Funcionalidade: API - Perfis
     Dado que possuo acesso à API de autenticação
     Quando realizo consulta de dados de acesso do perfil do usuário com API Key inválida
     Então retorna o status 401
+
+  Cenário: Validar que o endpoint de consulta de perfis exige API Key
+    Quando consulto endpoint de consulta de perfis sem API Key
+    Então endpoint de consulta de perfis rejeita requisicao sem API Key
