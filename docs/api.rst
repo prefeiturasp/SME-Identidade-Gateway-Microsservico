@@ -58,3 +58,15 @@ Gestão de Usuário
 
 .. automodule:: apps.gestao_usuario.api.serializers
    :members:
+
+EOL Autenticação SGP
+---------------------
+
+.. automodule:: apps.eol_autenticacao_sgp.api.views
+   :members:
+
+.. automodule:: apps.eol_autenticacao_sgp.api.serializers
+   :members:
+
+.. automodule:: apps.eol_autenticacao_sgp.services
+   :members:

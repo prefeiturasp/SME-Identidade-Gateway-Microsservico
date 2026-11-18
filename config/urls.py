@@ -40,6 +40,6 @@ urlpatterns = [
     ),
     path(
         f"{API_PREFIX}eol-autenticacao/",
-        include("apps.eol_autenticacao_sgp.api.urls"),
+        include("apps.eol_autenticacao.api.urls"),
     ),
 ]
