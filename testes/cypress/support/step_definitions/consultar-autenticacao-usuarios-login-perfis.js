@@ -103,3 +103,11 @@ And("as permissões do perfil devem ter estrutura válida", () => {
     }
   });
 });
+
+When("consulto endpoint de consulta de perfis sem API Key", () => {
+  cy.chamarEndpointSwagger("perfis", { omitirApiKey: true }).as("response");
+});
+
+Then("endpoint de consulta de perfis rejeita requisicao sem API Key", () => {
+  cy.get("@response").then((response) => expect(response.status).to.eq(401));
+});
