@@ -25,6 +25,11 @@ Cenário: Validar logout sem a API Key
     Quando realizo logout sem informar a API Key
     Então retorna o status 401
 
+Cenário: Validar logout com API Key inválida
+    Dado que possuo acesso à API de autenticação
+    Quando realizo logout com API Key inválida
+    Então retorna o status 401
+
 Cenário: Validar logout com refresh token inválido
     Dado que possuo acesso à API de autenticação
     Quando realizo logout com refresh token inválido

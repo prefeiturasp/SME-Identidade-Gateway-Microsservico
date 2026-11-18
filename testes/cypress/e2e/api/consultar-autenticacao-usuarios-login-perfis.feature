@@ -53,3 +53,8 @@ Funcionalidade: API - Perfis
   Cenário: Validar que o endpoint de consulta de perfis exige API Key
     Quando consulto endpoint de consulta de perfis sem API Key
     Então endpoint de consulta de perfis rejeita requisicao sem API Key
+
+  Cenário: Validar consulta de perfis sem login
+    Dado que possuo acesso à API de autenticação
+    Quando realizo consulta de perfis do usuário sem informar login
+    Então retorna o status 404

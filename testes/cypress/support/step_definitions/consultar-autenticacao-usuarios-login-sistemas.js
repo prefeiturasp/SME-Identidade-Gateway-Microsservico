@@ -18,6 +18,10 @@ When("realizo consulta de sistemas do usuário com API Key inválida", () => {
   cy.getSistemasPorLogin({ apiKey: CHAVE_INVALIDA }).as("response");
 });
 
+When("realizo consulta de sistemas do usuário sem informar login", () => {
+  cy.getSistemasPorLogin({ login: "" }).as("response");
+});
+
 And("o retorno deve conter a lista de sistemas", () => {
   cy.get("@response").then((response) => {
     if (response.status === 200) {

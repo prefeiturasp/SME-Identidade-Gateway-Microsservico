@@ -29,6 +29,10 @@ When("realizo login com login vazio", () => {
   cy.postLogin({ login: "" }).as("response");
 });
 
+When("realizo login com login nulo", () => {
+  cy.postLogin({ login: null }).as("response");
+});
+
 When("realizo login sem informar a API Key", () => {
   cy.postLogin({ omitirApiKey: true }).as("response");
 });

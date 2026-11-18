@@ -7,21 +7,44 @@ const apiHeaders = (options = {}) => {
   };
 
   if (!options.omitirApiKey) {
-    headers[Cypress.env("API_KEY_HEADER")] = Cypress.env("API_KEY");
+    headers[Cypress.env("API_KEY_HEADER")] =
+      options.apiKey !== undefined ? options.apiKey : Cypress.env("API_KEY");
   }
 
   return headers;
 };
 
 Cypress.Commands.add("chamarEndpointSwagger", (endpoint, options = {}) => {
-  const login = encodeURIComponent(Cypress.env("USUARIO_LOGIN"));
-  const perfil = encodeURIComponent(Cypress.env("USUARIO_PERFIL"));
+  const login = encodeURIComponent(
+    options.login !== undefined ? options.login : Cypress.env("USUARIO_LOGIN"),
+  );
+  const perfil = encodeURIComponent(
+    options.perfil !== undefined
+      ? options.perfil
+      : Cypress.env("USUARIO_PERFIL"),
+  );
   const email = encodeURIComponent(Cypress.env("USUARIO_EMAIL"));
   const requests = {
     alterarEmail: ["POST", "/autenticacao/alterar-email/", {}],
+    alterarEmailInvalido: [
+      "POST",
+      "/autenticacao/alterar-email/",
+      { login: "cypress-validacao-invalida", email: "email-invalido" },
+    ],
     alterarSenha: ["POST", "/autenticacao/alterar-senha/", {}],
+    alterarSenhaVazia: [
+      "POST",
+      "/autenticacao/alterar-senha/",
+      { login: "cypress-validacao-invalida", senha: "" },
+    ],
+    alterarSenhaSemDados: ["POST", "/autenticacao/alterar-senha/"],
     loginCliente: ["POST", "/autenticacao/cliente/login/", {}],
     validarTokenCliente: ["POST", "/autenticacao/cliente/validar-token/", {}],
+    validarTokenClienteVazio: [
+      "POST",
+      "/autenticacao/cliente/validar-token/",
+      { token: "" },
+    ],
     login: ["POST", "/autenticacao/login/", {}],
     logout: ["POST", "/autenticacao/logout/", {}],
     logoutNotificacao: ["POST", "/autenticacao/logout-notificacao/", {}],
@@ -33,9 +56,32 @@ Cypress.Commands.add("chamarEndpointSwagger", (endpoint, options = {}) => {
     health: ["GET", "/health/"],
     schema: ["GET", "/schema/"],
     criarUsuario: ["POST", "/usuarios/", {}],
+    criarUsuarioEmailInvalido: [
+      "POST",
+      "/usuarios/",
+      {
+        nome: "Usuario Cypress",
+        email: "email-invalido",
+        rf: "cypress-validacao-invalida",
+      },
+    ],
     concederAcesso: ["POST", "/usuarios/conceder-acesso/", {}],
+    concederAcessoRolesVazias: [
+      "POST",
+      "/usuarios/conceder-acesso/",
+      {
+        identificador: "cypress-validacao-invalida",
+        sistema: 1,
+        roles: [],
+      },
+    ],
     consultarUsuario: ["GET", `/usuarios/consultar/?email=${email}`],
     sincronizarUsuario: ["POST", "/usuarios/sincronizar/", {}],
+    sincronizarUsuarioSemIdentificador: [
+      "POST",
+      "/usuarios/sincronizar/",
+      { identificador: "" },
+    ],
   };
 
   const request = requests[endpoint];

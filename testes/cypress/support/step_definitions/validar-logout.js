@@ -1,5 +1,6 @@
 import { When, And, Then } from "cypress-cucumber-preprocessor/steps";
 const REFRESH_TOKEN_INVALIDO = "refresh-token-invalido";
+const CHAVE_INVALIDA = "chave-invalida-automacao";
 
 // ========================================
 
@@ -13,6 +14,12 @@ When("realizo logout com refresh token vazio", () => {
 
 When("realizo logout sem informar a API Key", () => {
   cy.postLogout(REFRESH_TOKEN_INVALIDO, { omitirApiKey: true }).as(
+    "response",
+  );
+});
+
+When("realizo logout com API Key inválida", () => {
+  cy.postLogout(REFRESH_TOKEN_INVALIDO, { apiKey: CHAVE_INVALIDA }).as(
     "response",
   );
 });

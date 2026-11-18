@@ -16,6 +16,11 @@ Cenário: Validar token enriquecido vazio
     Quando valido o token enriquecido vazio
     Então retorna o status 400
 
+Cenário: Validar token enriquecido contendo apenas espaços
+    Dado que possuo acesso à API de autenticação
+    Quando valido o token enriquecido contendo apenas espaços
+    Então retorna o status 400
+
 Cenário: Validar token enriquecido sem a API Key
     Dado que possuo acesso à API de autenticação
     Quando valido o token enriquecido sem informar a API Key

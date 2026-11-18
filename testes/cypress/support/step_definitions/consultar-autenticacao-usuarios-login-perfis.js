@@ -18,6 +18,10 @@ When("realizo consulta de perfis do usuário com API Key inválida", () => {
   cy.getPerfisPorLogin({ apiKey: CHAVE_INVALIDA }).as("response");
 });
 
+When("realizo consulta de perfis do usuário sem informar login", () => {
+  cy.getPerfisPorLogin({ login: "" }).as("response");
+});
+
 And("o retorno deve conter a lista de perfis", () => {
   cy.get("@response").then((response) => {
     if (response.status === 200) {
