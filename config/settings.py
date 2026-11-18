@@ -149,3 +149,6 @@ ETL_TIMEOUT = float(os.getenv("ETL_TIMEOUT", "30"))
 # da API_KEY que os clientes usam para chamar o Gateway.
 API_KEY_ETL = os.getenv("API_KEY_ETL", "")
 API_KEY_ETL_HEADER = os.getenv("API_KEY_ETL_HEADER", "X-API-Key")
+
+ABRANGENCIA_MS_URL = os.getenv("ABRANGENCIA_MS_URL", "")
+API_KEY_ABRANGENCIA_MS = os.getenv("API_KEY_ABRANGENCIA_MS", "")

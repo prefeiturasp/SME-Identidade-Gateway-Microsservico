@@ -1,7 +1,13 @@
 """Caminhos completos dos endpoints legados de autenticação do SGP."""
 
-from django.urls import URLPattern
+from django.urls import path
 
-app_name = "eol_autenticacao_sgp"
+from apps.eol_autenticacao_sgp.api.views import DadosUsuarioView
 
-urlpatterns: list[URLPattern] = []
+urlpatterns = [
+    path(
+        "<str:login>/dados/",
+        DadosUsuarioView.as_view(),
+        name="eol-autenticacao-sgp-dados-usuario",
+    ),
+]
