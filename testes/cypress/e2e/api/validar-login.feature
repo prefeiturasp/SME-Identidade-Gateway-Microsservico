@@ -43,6 +43,11 @@ Cenário: Validar login com login vazio
     Quando realizo login com login vazio
     Então retorna o status 400
 
+Cenário: Validar login com valor nulo
+    Dado que possuo acesso à API de autenticação
+    Quando realizo login com login nulo
+    Então retorna o status 400
+
 Cenário: Validar login sem a API Key
     Dado que possuo acesso à API de autenticação
     Quando realizo login sem informar a API Key

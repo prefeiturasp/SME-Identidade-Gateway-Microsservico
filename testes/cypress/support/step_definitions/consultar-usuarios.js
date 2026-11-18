@@ -18,6 +18,10 @@ When("realizo consulta de dados do usuário com API Key inválida", () => {
   cy.getDadosUsuario({ apiKey: CHAVE_INVALIDA }).as("response");
 });
 
+When("realizo consulta de dados do usuário sem informar login", () => {
+  cy.getDadosUsuario({ login: "" }).as("response");
+});
+
 And("o retorno deve conter os dados cadastrais do usuário", () => {
   cy.get("@response").then((response) => {
     if (response.status === 200) {

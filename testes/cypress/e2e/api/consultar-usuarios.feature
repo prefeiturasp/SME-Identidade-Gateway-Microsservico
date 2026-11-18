@@ -25,3 +25,8 @@ Funcionalidade: API - Usuários
     Dado que possuo acesso à API de autenticação
     Quando realizo consulta de dados do usuário com API Key inválida
     Então retorna o status 401
+
+  Cenário: Validar consulta de dados do usuário sem login
+    Dado que possuo acesso à API de autenticação
+    Quando realizo consulta de dados do usuário sem informar login
+    Então retorna o status 404

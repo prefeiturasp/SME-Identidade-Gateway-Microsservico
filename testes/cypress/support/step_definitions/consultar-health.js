@@ -10,3 +10,15 @@ Then('a resposta de health check deve ser válida', () => {
     expect(expected, "status recebido: " + response.status).to.include(response.status);
   });
 });
+
+Then('a resposta de health check deve informar o estado da aplicação e dependências', () => {
+  cy.get("@response").then((response) => {
+    expect(response.status).to.eq(200);
+    expect(response.body.status).to.eq("healthy");
+    expect(response.body.dependencias.token_ms).to.be.oneOf([
+      "healthy",
+      "degraded",
+      "unhealthy",
+    ]);
+  });
+});

@@ -10,6 +10,10 @@ When("valido o token enriquecido vazio", () => {
   cy.postValidarToken("").as("response");
 });
 
+When("valido o token enriquecido contendo apenas espaços", () => {
+  cy.postValidarToken(" ").as("response");
+});
+
 When("valido o token enriquecido sem informar a API Key", () => {
   cy.postValidarToken("token-qualquer", { omitirApiKey: true }).as(
     "response",
