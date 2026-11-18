@@ -10,11 +10,32 @@ import pytest
 
 from apps.eol_autenticacao_sgp import services
 
-_DADOS_ETL = {
+_USUARIO_ATIVO = {
+    "kc_user_id": "b68ac72d-4bca-49de-bba1-a1ae9750905a",
+    "username": "1234567",
     "nome": "USUARIO TESTE",
     "cpf": "00123456789",
+    "rf": "1234567",
     "email": "usuario@exemplo.com",
-    "codigo_rf": "1234567",
+    "ativo": True,
+}
+
+_DADOS_USUARIO = {
+    "cpf": "00123456789",
+    "nome": "USUARIO TESTE",
+    "codigoRf": "1234567",
+    "email": "usuario@exemplo.com",
+    "dreCodigo": None,
+    "emailValido": True,
+}
+
+_DADOS_DRE = {
+    "cpf": None,
+    "nome": None,
+    "codigoRf": None,
+    "email": None,
+    "dreCodigo": "108600",
+    "emailValido": False,
 }
 
 
@@ -24,19 +45,10 @@ def _resposta(
     *,
     conteudo: bytes | None = None,
 ) -> httpx.Response:
-    """Cria uma resposta HTTP simulada.
-
-    Args:
-        codigo: Código de resposta HTTP.
-        dados: Conteúdo JSON da resposta.
-        conteudo: Conteúdo bruto para respostas sem JSON válido.
-
-    Returns:
-        Resposta HTTP simulada.
-    """
+    """Cria uma resposta HTTP para o MS-Abrangência."""
     requisicao = httpx.Request(
         "GET",
-        "https://servico-teste/api/consulta",
+        "https://abrangencia-teste/api/consulta",
     )
 
     if conteudo is not None:
@@ -57,79 +69,71 @@ def _resposta(
 
 
 @pytest.fixture
-def clientes_http() -> Generator[tuple[MagicMock, MagicMock], None, None]:
-    """Fornece os clientes HTTP do ETL e da Abrangência simulados."""
-    etl = MagicMock()
-    abrangencia = MagicMock()
-
-    clientes = {
-        "etl": etl,
-        "abrangencia": abrangencia,
-    }
-
-    with patch(
-        "apps.eol_autenticacao_sgp.services.get_api_client",
-        side_effect=clientes.__getitem__,
+def integracoes() -> (
+    Generator[tuple[MagicMock, MagicMock, MagicMock], None, None]
+):
+    """Simula a consulta ao Keycloak e o cliente da Abrangência."""
+    with (
+        patch(
+            "apps.eol_autenticacao_sgp.services."
+            "keycloak_admin.obter_dados_usuario"
+        ) as buscar_usuario,
+        patch(
+            "apps.eol_autenticacao_sgp.services.get_api_client"
+        ) as obter_cliente,
     ):
-        yield etl, abrangencia
+        cliente_abrangencia = MagicMock()
+        obter_cliente.return_value = cliente_abrangencia
+        yield buscar_usuario, obter_cliente, cliente_abrangencia
 
 
 class TestServicoDadosUsuario:
-    """Testa a composição dos dados e a ordem das consultas."""
+    """Testa a composição do DTO e o fallback para a DRE vigente."""
 
-    def test_encontra_usuario_no_etl_sem_consultar_abrangencia(
+    def test_usuario_ativo_retorna_dados_sem_consultar_abrangencia(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
     ) -> None:
-        """Retorna os dados cadastrais quando o ETL encontra o usuário."""
-        etl, abrangencia = clientes_http
-        etl.get.return_value = _resposta(200, _DADOS_ETL)
+        """Retorna dados do Keycloak sem buscar DRE."""
+        buscar_usuario, obter_cliente, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = _USUARIO_ATIVO.copy()
 
         dados = services.ServicoDadosUsuario().carregar("1234567")
 
-        assert dados == {
-            "cpf": "00123456789",
-            "nome": "USUARIO TESTE",
-            "codigoRf": "1234567",
-            "email": "usuario@exemplo.com",
-            "dreCodigo": None,
-            "emailValido": True,
-        }
-
-        etl.get.assert_called_once_with(
-            "/api/v1/etl/coresso/usuarios/1234567/dados/"
-        )
-        abrangencia.get.assert_not_called()
+        assert dados == _DADOS_USUARIO
+        buscar_usuario.assert_called_once_with("1234567")
+        obter_cliente.assert_not_called()
+        cliente_abrangencia.get.assert_not_called()
 
     @pytest.mark.parametrize(
-        ("email", "valido"),
+        ("email", "esperado", "valido"),
         [
-            (None, False),
-            ("", False),
-            ("sem-arroba", False),
-            ("usuario@exemplo.com", True),
+            ("usuario@exemplo.com", "usuario@exemplo.com", True),
+            ("sem-arroba", None, False),
+            ("", None, False),
+            (None, None, False),
         ],
     )
-    def test_valida_email_recebido_do_etl(
+    def test_valida_email_do_usuario_ativo(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
         email: str | None,
+        esperado: str | None,
         valido: bool,
     ) -> None:
-        """Anula e-mails inválidos e mantém e-mails válidos."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(
-            200,
-            {**_DADOS_ETL, "email": email},
-        )
+        """Preserva somente e-mails válidos no DTO."""
+        buscar_usuario, obter_cliente, _ = integracoes
+        buscar_usuario.return_value = {
+            **_USUARIO_ATIVO,
+            "email": email,
+        }
 
         dados = services.ServicoDadosUsuario().carregar("1234567")
 
         assert dados is not None
-        assert dados["email"] == (email if valido else None)
+        assert dados["email"] == esperado
         assert dados["emailValido"] is valido
-        abrangencia.get.assert_not_called()
+        obter_cliente.assert_not_called()
 
     @pytest.mark.parametrize(
         ("login", "codigo_rf"),
@@ -143,279 +147,259 @@ class TestServicoDadosUsuario:
             ("usuario.teste", None),
         ],
     )
-    def test_preenche_codigo_rf_a_partir_do_login(
+    def test_codigo_rf_depende_do_login_int32(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
         login: str,
         codigo_rf: str | None,
     ) -> None:
-        """Preserva o login somente quando convertido para Int32."""
-        etl, _ = clientes_http
-        etl.get.return_value = _resposta(200, _DADOS_ETL)
+        """Utiliza o login original quando ele representa um Int32."""
+        buscar_usuario, obter_cliente, _ = integracoes
+        buscar_usuario.return_value = _USUARIO_ATIVO.copy()
 
         dados = services.ServicoDadosUsuario().carregar(login)
 
         assert dados is not None
         assert dados["codigoRf"] == codigo_rf
+        buscar_usuario.assert_called_once_with(login)
+        obter_cliente.assert_not_called()
 
-    def test_sem_usuario_consulta_dre_vigente(
+    def test_usuario_ativo_com_campos_nulos_nao_consulta_dre(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
     ) -> None:
-        """Consulta a DRE somente quando o ETL não encontra o usuário."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(204)
-        abrangencia.get.return_value = _resposta(
-            200,
-            {
-                "login": "1234567",
-                "dreCodigo": "108600",
-            },
-        )
+        """Não confunde atributos vazios com usuário inexistente."""
+        buscar_usuario, obter_cliente, _ = integracoes
+        buscar_usuario.return_value = {
+            **_USUARIO_ATIVO,
+            "cpf": None,
+            "nome": None,
+            "email": None,
+        }
 
         dados = services.ServicoDadosUsuario().carregar("1234567")
 
         assert dados == {
             "cpf": None,
             "nome": None,
-            "codigoRf": None,
+            "codigoRf": "1234567",
             "email": None,
-            "dreCodigo": "108600",
+            "dreCodigo": None,
             "emailValido": False,
         }
+        obter_cliente.assert_not_called()
 
-        abrangencia.get.assert_called_once_with(
+    @pytest.mark.parametrize(
+        "usuario",
+        [
+            None,
+            {**_USUARIO_ATIVO, "ativo": False},
+        ],
+    )
+    def test_usuario_ausente_ou_inativo_consulta_dre(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+        usuario: dict | None,
+    ) -> None:
+        """Busca a DRE para usuários ausentes ou inativos."""
+        buscar_usuario, obter_cliente, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = usuario
+        cliente_abrangencia.get.return_value = _resposta(
+            200,
+            {"login": "1234567", "dreCodigo": "108600"},
+        )
+
+        dados = services.ServicoDadosUsuario().carregar("1234567")
+
+        assert dados == _DADOS_DRE
+        buscar_usuario.assert_called_once_with("1234567")
+        obter_cliente.assert_called_once_with("abrangencia")
+        cliente_abrangencia.get.assert_called_once_with(
             "/api/abrangencia/usuarios/1234567/dre-vigente"
         )
 
-    def test_sem_usuario_e_sem_dre_retorna_none(
+    @pytest.mark.parametrize(
+        "usuario",
+        [
+            None,
+            {**_USUARIO_ATIVO, "ativo": False},
+        ],
+    )
+    def test_usuario_sem_dre_retorna_none(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+        usuario: dict | None,
     ) -> None:
-        """Retorna None quando nenhuma das fontes encontra informações."""
-        etl, abrangencia = clientes_http
+        """Retorna None quando não há usuário elegível nem DRE."""
+        buscar_usuario, obter_cliente, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = usuario
+        cliente_abrangencia.get.return_value = _resposta(204)
 
-        etl.get.return_value = _resposta(204)
-        abrangencia.get.return_value = _resposta(204)
+        dados = services.ServicoDadosUsuario().carregar("1234567")
 
-        resultado = services.ServicoDadosUsuario().carregar("1234567")
-
-        assert resultado is None
-        abrangencia.get.assert_called_once()
-
-    def test_falha_sql_informada_pelo_etl(
-        self,
-        clientes_http: tuple[MagicMock, MagicMock],
-    ) -> None:
-        """Distingue erro SQL de ausência de usuário."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(
-            503,
-            {"codigo": "ERRO_CONSULTA_CORESSO"},
+        assert dados is None
+        obter_cliente.assert_called_once_with("abrangencia")
+        cliente_abrangencia.get.assert_called_once_with(
+            "/api/abrangencia/usuarios/1234567/dre-vigente"
         )
 
+    def test_codigo_dre_numerico_e_convertido_para_texto(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+    ) -> None:
+        """Normaliza a DRE numérica recebida da Abrangência."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
+        cliente_abrangencia.get.return_value = _resposta(
+            200,
+            {"login": "1234567", "dreCodigo": 108600},
+        )
+
+        dados = services.ServicoDadosUsuario().carregar("1234567")
+
+        assert dados is not None
+        assert dados["dreCodigo"] == "108600"
+
+    def test_erro_no_keycloak_nao_consulta_abrangencia(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+    ) -> None:
+        """Propaga falha do Keycloak sem acionar o fallback."""
+        buscar_usuario, obter_cliente, _ = integracoes
+        buscar_usuario.side_effect = RuntimeError("Keycloak indisponível")
         servico = services.ServicoDadosUsuario()
 
-        with pytest.raises(services.ConsultaCoreSSOError):
+        with pytest.raises(RuntimeError, match="Keycloak indisponível"):
             servico.carregar("1234567")
 
-        abrangencia.get.assert_not_called()
+        obter_cliente.assert_not_called()
 
-    @pytest.mark.parametrize("codigo", [401, 404, 500])
-    def test_status_inesperado_do_etl(
+    @pytest.mark.parametrize("codigo", [400, 401, 404, 500, 503])
+    def test_erro_http_da_abrangencia(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
         codigo: int,
     ) -> None:
-        """Propaga falhas HTTP do ETL sem consultar a Abrangência."""
-        etl, abrangencia = clientes_http
-        etl.get.return_value = _resposta(codigo)
-
-        servico = services.ServicoDadosUsuario()
-
-        with pytest.raises(services.IntegracaoETLError):
-            servico.carregar("1234567")
-
-        abrangencia.get.assert_not_called()
-
-    def test_falha_http_da_abrangencia(
-        self,
-        clientes_http: tuple[MagicMock, MagicMock],
-    ) -> None:
-        """Não interpreta erro HTTP da Abrangência como ausência de DRE."""
-        etl, abrangencia = clientes_http
-        etl.get.return_value = _resposta(204)
-        abrangencia.get.return_value = _resposta(503)
-
+        """Rejeita códigos HTTP diferentes de 200 e 204."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
+        cliente_abrangencia.get.return_value = _resposta(codigo)
         servico = services.ServicoDadosUsuario()
 
         with pytest.raises(services.ConsultaAbrangenciaError):
             servico.carregar("1234567")
 
-    def test_falha_de_transporte_e_propagada(
+    def test_json_invalido_da_abrangencia(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
     ) -> None:
-        """Propaga a falha de transporte do cliente HTTP."""
-        etl, abrangencia = clientes_http
+        """Rejeita resposta que não contém JSON válido."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
+        cliente_abrangencia.get.return_value = _resposta(
+            200,
+            conteudo=b"{invalido",
+        )
+        servico = services.ServicoDadosUsuario()
 
+        with pytest.raises(services.ConsultaAbrangenciaError):
+            servico.carregar("1234567")
+
+    @pytest.mark.parametrize("dados", [[], None, "texto"])
+    def test_contrato_invalido_da_abrangencia(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+        dados: object,
+    ) -> None:
+        """Rejeita respostas fora do contrato da DRE vigente."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
+        cliente_abrangencia.get.return_value = _resposta(
+            200,
+            dados if dados is not None else "null",
+            conteudo=b"null" if dados is None else None,
+        )
+        servico = services.ServicoDadosUsuario()
+
+        with pytest.raises(services.ConsultaAbrangenciaError):
+            servico.carregar("1234567")
+
+    def test_login_divergente_da_abrangencia(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+    ) -> None:
+        """Rejeita resposta referente a outro login."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
+        cliente_abrangencia.get.return_value = _resposta(
+            200,
+            {"login": "outro-login", "dreCodigo": "108600"},
+        )
+        servico = services.ServicoDadosUsuario()
+
+        with pytest.raises(services.ConsultaAbrangenciaError):
+            servico.carregar("1234567")
+
+    @pytest.mark.parametrize(
+        "codigo",
+        [None, "", "  ", True, [], {}],
+    )
+    def test_codigo_dre_invalido(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+        codigo: object,
+    ) -> None:
+        """Rejeita códigos de DRE ausentes ou fora do contrato."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
+        cliente_abrangencia.get.return_value = _resposta(
+            200,
+            {"login": "1234567", "dreCodigo": codigo},
+        )
+        servico = services.ServicoDadosUsuario()
+
+        with pytest.raises(services.ConsultaAbrangenciaError):
+            servico.carregar("1234567")
+
+    def test_falha_de_conexao_com_abrangencia(
+        self,
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
+    ) -> None:
+        """Propaga falha de transporte do cliente HTTP."""
+        buscar_usuario, _, cliente_abrangencia = integracoes
+        buscar_usuario.return_value = None
         requisicao = httpx.Request(
             "GET",
-            "https://etl-teste/api/consulta",
+            "https://abrangencia-teste/api/consulta",
         )
-        etl.get.side_effect = httpx.ConnectError(
-            "conexão indisponível",
+        cliente_abrangencia.get.side_effect = httpx.ConnectError(
+            "Conexão recusada",
             request=requisicao,
         )
-
         servico = services.ServicoDadosUsuario()
 
         with pytest.raises(httpx.ConnectError):
             servico.carregar("1234567")
 
-        abrangencia.get.assert_not_called()
-
-    def test_etl_503_com_json_invalido(
+    def test_falha_na_conversao_do_login_retorna_codigo_rf_nulo(
         self,
-        clientes_http: tuple[MagicMock, MagicMock],
+        integracoes: tuple[MagicMock, MagicMock, MagicMock],
     ) -> None:
-        """Trata HTTP 503 com JSON inválido como falha do ETL."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(
-            503,
-            conteudo=b"json invalido",
-        )
+        """Retorna RF nulo quando a conversão numérica falha."""
+        buscar_usuario, obter_cliente, _ = integracoes
+        buscar_usuario.return_value = _USUARIO_ATIVO.copy()
 
         servico = services.ServicoDadosUsuario()
 
-        with pytest.raises(
-            services.IntegracaoETLError,
-            match="MS-ETL retornou HTTP 503",
-        ):
-            servico.carregar("1234567")
-
-        abrangencia.get.assert_not_called()
-
-    def test_etl_200_com_json_invalido(
-        self,
-        clientes_http: tuple[MagicMock, MagicMock],
-    ) -> None:
-        """Trata JSON inválido do ETL como erro de integração."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(
-            200,
-            conteudo=b"json invalido",
-        )
-
-        servico = services.ServicoDadosUsuario()
-
-        with pytest.raises(
-            services.IntegracaoETLError,
-            match="Resposta JSON inválida do MS-ETL",
-        ):
-            servico.carregar("1234567")
-
-        abrangencia.get.assert_not_called()
-
-    def test_abrangencia_200_com_json_invalido(
-        self,
-        clientes_http: tuple[MagicMock, MagicMock],
-    ) -> None:
-        """Trata JSON inválido da Abrangência como erro de consulta."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(204)
-        abrangencia.get.return_value = _resposta(
-            200,
-            conteudo=b"json invalido",
-        )
-
-        servico = services.ServicoDadosUsuario()
-
-        with pytest.raises(
-            services.ConsultaAbrangenciaError,
-            match="Resposta JSON inválida do MS-Abrangência",
-        ):
-            servico.carregar("1234567")
-
-        etl.get.assert_called_once()
-        abrangencia.get.assert_called_once()
-
-    def test_login_int32_com_erro_de_conversao(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Retorna False quando a conversão para Int32 falha."""
-        conversor = MagicMock(side_effect=ValueError("Valor inválido"))
-
-        monkeypatch.setattr(
+        with patch.object(
             services,
             "int",
-            conversor,
-            raising=False,
-        )
-
-        resultado = services._login_eh_int32("1234567")
-
-        assert resultado is False
-        conversor.assert_called_once_with("1234567")
-
-    @pytest.mark.parametrize(
-        "dados",
-        [
-            [],
-            "resposta invalida",
-            123,
-        ],
-    )
-    def test_etl_200_com_json_que_nao_e_objeto(
-        self,
-        clientes_http: tuple[MagicMock, MagicMock],
-        dados: object,
-    ) -> None:
-        """Rejeita respostas JSON do ETL que não sejam objetos."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(200, dados)
-
-        servico = services.ServicoDadosUsuario()
-
-        with pytest.raises(
-            services.IntegracaoETLError,
-            match="Resposta do MS-ETL deve ser um objeto JSON",
+            side_effect=ValueError("Conversão inválida"),
+            create=True,
         ):
-            servico.carregar("1234567")
+            dados = servico.carregar("1234567")
 
-        etl.get.assert_called_once()
-        abrangencia.get.assert_not_called()
-
-    @pytest.mark.parametrize(
-        "dados",
-        [
-            {},
-            {"dreCodigo": None},
-        ],
-    )
-    def test_abrangencia_200_sem_dre_codigo_retorna_none(
-        self,
-        clientes_http: tuple[MagicMock, MagicMock],
-        dados: dict[str, object],
-    ) -> None:
-        """Retorna None quando a Abrangência não informa uma DRE."""
-        etl, abrangencia = clientes_http
-
-        etl.get.return_value = _resposta(204)
-        abrangencia.get.return_value = _resposta(200, dados)
-
-        resultado = services.ServicoDadosUsuario().carregar("1234567")
-
-        assert resultado is None
-
-        etl.get.assert_called_once()
-        abrangencia.get.assert_called_once_with(
-            "/api/abrangencia/usuarios/1234567/dre-vigente"
-        )
+        assert dados is not None
+        assert dados["codigoRf"] is None
+        buscar_usuario.assert_called_once_with("1234567")
+        obter_cliente.assert_not_called()

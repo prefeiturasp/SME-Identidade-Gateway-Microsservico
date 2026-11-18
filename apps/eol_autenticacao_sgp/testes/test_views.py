@@ -11,13 +11,14 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.eol_autenticacao_sgp.services import (
-    ConsultaCoreSSOError,
-    IntegracaoETLError,
-)
+from apps.eol_autenticacao_sgp.services import ConsultaAbrangenciaError
 
 _SERVICO = "apps.eol_autenticacao_sgp.api.views.ServicoDadosUsuario"
 _NOME_ROTA = "eol-autenticacao-sgp-dados-usuario"
+_ERRO_GERAL = (
+    "Houve um comportamento inesperado do sistema. "
+    "Por favor, contate a SME."
+)
 
 _DADOS_USUARIO = {
     "cpf": "00123456789",
@@ -28,51 +29,49 @@ _DADOS_USUARIO = {
     "emailValido": True,
 }
 
+_DADOS_DRE = {
+    "cpf": None,
+    "nome": None,
+    "codigoRf": None,
+    "email": None,
+    "dreCodigo": "108600",
+    "emailValido": False,
+}
+
 
 @pytest.fixture
 def cliente(settings: Any) -> APIClient:
-    """Fornece um cliente autenticado por API Key."""
+    """Fornece cliente HTTP autenticado com API Key de teste."""
     settings.API_KEY = "chave-teste"
     settings.API_KEY_HEADER = "X-API-Key"
 
     cliente_api = APIClient()
     cliente_api.credentials(HTTP_X_API_KEY="chave-teste")
-
     return cliente_api
 
 
 @pytest.fixture
 def servico_mocado() -> Generator[MagicMock, None, None]:
-    """Substitui o serviço de consulta utilizado pela view."""
+    """Simula o serviço de consulta usado pela view."""
     with patch(_SERVICO) as classe_servico:
         yield classe_servico.return_value
 
 
-def _url(login: str = "1234567") -> str:
-    """Resolve a rota de consulta do usuário.
-
-    Args:
-        login: Login utilizado na URL.
-
-    Returns:
-        Endereço do endpoint do usuário.
-    """
-    return reverse(
-        _NOME_ROTA,
-        kwargs={"login": login},
-    )
+def _url(login: str = "7210418") -> str:
+    """Retorna a URL de consulta a partir do nome da rota."""
+    return str(reverse(_NOME_ROTA, kwargs={"login": login}))
 
 
 class TestDadosUsuarioView:
-    """Testa autenticação e respostas da consulta de usuário."""
+    """Valida respostas HTTP, serialização e autenticação da view."""
 
-    def test_usuario_encontrado_retorna_200_com_dto(
+    def test_usuario_ativo_retorna_200_com_seis_campos(
         self,
         cliente: APIClient,
         servico_mocado: MagicMock,
     ) -> None:
-        """Retorna todos os campos do usuário encontrado."""
-        servico_mocado.carregar.return_value = _DADOS_USUARIO
+        """Devolve o DTO cadastral do usuário ativo."""
+        servico_mocado.carregar.return_value = _DADOS_USUARIO.copy()
 
         resposta = cliente.get(_url())
 
@@ -80,33 +79,44 @@ class TestDadosUsuarioView:
         assert resposta.json() == _DADOS_USUARIO
         servico_mocado.carregar.assert_called_once_with("1234567")
 
-    def test_retorna_dto_parcial_quando_apenas_dre_e_encontrada(
+    def test_usuario_ativo_sem_email_valido_retorna_200(
         self,
         cliente: APIClient,
         servico_mocado: MagicMock,
     ) -> None:
-        """Mantém os campos nulos quando há apenas a DRE."""
-        dados = {
-            "cpf": None,
-            "nome": None,
-            "codigoRf": None,
+        """Preserva os campos nulos produzidos pelo serviço."""
+        servico_mocado.carregar.return_value = {
+            **_DADOS_USUARIO,
             "email": None,
-            "dreCodigo": "108600",
             "emailValido": False,
         }
-        servico_mocado.carregar.return_value = dados
 
         resposta = cliente.get(_url())
 
         assert resposta.status_code == status.HTTP_200_OK
-        assert resposta.json() == dados
+        assert resposta.json()["email"] is None
+        assert resposta.json()["emailValido"] is False
 
-    def test_sem_dados_retorna_204_sem_corpo(
+    def test_dre_encontrada_retorna_200_com_dto_parcial(
         self,
         cliente: APIClient,
         servico_mocado: MagicMock,
     ) -> None:
-        """Retorna resposta vazia quando nenhuma fonte encontra dados."""
+        """Retorna somente a DRE quando não há usuário elegível."""
+        servico_mocado.carregar.return_value = _DADOS_DRE.copy()
+
+        resposta = cliente.get(_url())
+
+        assert resposta.status_code == status.HTTP_200_OK
+        assert resposta.json() == _DADOS_DRE
+        servico_mocado.carregar.assert_called_once_with("1234567")
+
+    def test_usuario_e_dre_ausentes_retorna_204_sem_corpo(
+        self,
+        cliente: APIClient,
+        servico_mocado: MagicMock,
+    ) -> None:
+        """Retorna No Content quando nenhuma fonte encontra dados."""
         servico_mocado.carregar.return_value = None
 
         resposta = cliente.get(_url())
@@ -116,46 +126,34 @@ class TestDadosUsuarioView:
         servico_mocado.carregar.assert_called_once_with("1234567")
 
     @pytest.mark.parametrize(
-        ("erro", "mensagem"),
+        "erro",
         [
-            (
-                ConsultaCoreSSOError("Falha SQL"),
-                "Houve um problema na conexão com o banco do EOL. "
-                "Por favor, contate a SME.",
-            ),
-            (
-                IntegracaoETLError("HTTP 401"),
-                "Houve um comportamento inesperado do sistema. "
-                "Por favor, contate a SME.",
-            ),
-            (
-                ValueError("Falha inesperada"),
-                "Houve um comportamento inesperado do sistema. "
-                "Por favor, contate a SME.",
-            ),
+            ConsultaAbrangenciaError("MS-Abrangência indisponível"),
+            RuntimeError("Keycloak indisponível"),
+            ValueError("Resposta inesperada"),
         ],
     )
-    def test_falhas_retorna_400_com_mensagem(
+    def test_falha_tecnica_retorna_400_com_mensagem_legada(
         self,
         cliente: APIClient,
         servico_mocado: MagicMock,
         erro: Exception,
-        mensagem: str,
     ) -> None:
-        """Converte falhas do serviço nas mensagens públicas previstas."""
+        """Converte falhas das integrações na mensagem pública prevista."""
         servico_mocado.carregar.side_effect = erro
 
         resposta = cliente.get(_url())
 
         assert resposta.status_code == status.HTTP_400_BAD_REQUEST
-        assert resposta.json() == mensagem
+        assert resposta.json() == _ERRO_GERAL
+        servico_mocado.carregar.assert_called_once_with("1234567")
 
     def test_sem_api_key_retorna_401_sem_consultar_servico(
         self,
         cliente: APIClient,
         servico_mocado: MagicMock,
     ) -> None:
-        """Impede a consulta quando a API Key não é enviada."""
+        """Bloqueia requisições sem a API Key do Gateway."""
         cliente.credentials()
 
         resposta = cliente.get(_url())
@@ -168,8 +166,8 @@ class TestDadosUsuarioView:
         cliente: APIClient,
         servico_mocado: MagicMock,
     ) -> None:
-        """Impede a consulta quando a API Key é inválida."""
-        cliente.credentials(HTTP_X_API_KEY="invalida")
+        """Bloqueia requisições com API Key inválida."""
+        cliente.credentials(HTTP_X_API_KEY="chave-invalida")
 
         resposta = cliente.get(_url())
 
@@ -181,12 +179,8 @@ class TestDadosUsuarioView:
         cliente: APIClient,
         servico_mocado: MagicMock,
     ) -> None:
-        """Restringe o endpoint ao método GET."""
-        resposta = cliente.post(
-            _url(),
-            {},
-            format="json",
-        )
+        """Não permite método diferente de GET."""
+        resposta = cliente.post(_url(), {}, format="json")
 
         assert resposta.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         servico_mocado.carregar.assert_not_called()
