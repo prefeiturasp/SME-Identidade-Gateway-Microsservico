@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from django.urls import reverse
@@ -52,14 +52,27 @@ def cliente(settings: Any) -> APIClient:
 
 @pytest.fixture
 def servico_mocado() -> Generator[MagicMock, None, None]:
-    """Simula o serviço de consulta usado pela view."""
+    """Simula o serviço de consulta utilizado pela view."""
     with patch(_SERVICO) as classe_servico:
         yield classe_servico.return_value
 
 
-def _url(login: str = "7210418") -> str:
+def _url(login: str = "1234567") -> str:
     """Retorna a URL de consulta a partir do nome da rota."""
     return str(reverse(_NOME_ROTA, kwargs={"login": login}))
+
+
+def _verificar_consulta_usuario(
+    servico_mocado: MagicMock,
+    login: str = "1234567",
+) -> None:
+    """Confere uma única chamada ao serviço com o login esperado."""
+    servico_mocado.carregar.assert_called_once()
+
+    assert servico_mocado.carregar.call_args in (
+        call(login),
+        call(login=login),
+    )
 
 
 class TestDadosUsuarioView:
@@ -77,7 +90,7 @@ class TestDadosUsuarioView:
 
         assert resposta.status_code == status.HTTP_200_OK
         assert resposta.json() == _DADOS_USUARIO
-        servico_mocado.carregar.assert_called_once_with("1234567")
+        _verificar_consulta_usuario(servico_mocado)
 
     def test_usuario_ativo_sem_email_valido_retorna_200(
         self,
@@ -94,8 +107,12 @@ class TestDadosUsuarioView:
         resposta = cliente.get(_url())
 
         assert resposta.status_code == status.HTTP_200_OK
-        assert resposta.json()["email"] is None
-        assert resposta.json()["emailValido"] is False
+        assert resposta.json() == {
+            **_DADOS_USUARIO,
+            "email": None,
+            "emailValido": False,
+        }
+        _verificar_consulta_usuario(servico_mocado)
 
     def test_dre_encontrada_retorna_200_com_dto_parcial(
         self,
@@ -109,7 +126,7 @@ class TestDadosUsuarioView:
 
         assert resposta.status_code == status.HTTP_200_OK
         assert resposta.json() == _DADOS_DRE
-        servico_mocado.carregar.assert_called_once_with("1234567")
+        _verificar_consulta_usuario(servico_mocado)
 
     def test_usuario_e_dre_ausentes_retorna_204_sem_corpo(
         self,
@@ -123,7 +140,7 @@ class TestDadosUsuarioView:
 
         assert resposta.status_code == status.HTTP_204_NO_CONTENT
         assert resposta.content == b""
-        servico_mocado.carregar.assert_called_once_with("1234567")
+        _verificar_consulta_usuario(servico_mocado)
 
     @pytest.mark.parametrize(
         "erro",
@@ -146,7 +163,7 @@ class TestDadosUsuarioView:
 
         assert resposta.status_code == status.HTTP_400_BAD_REQUEST
         assert resposta.json() == _ERRO_GERAL
-        servico_mocado.carregar.assert_called_once_with("1234567")
+        _verificar_consulta_usuario(servico_mocado)
 
     def test_sem_api_key_retorna_401_sem_consultar_servico(
         self,
