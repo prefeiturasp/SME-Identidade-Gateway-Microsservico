@@ -72,8 +72,8 @@ class ValidarEmailExistenteView(APIView):
     def get(self, request: Request, login: str, email: str) -> Response:
         """Valida a entrada e converte o resultado do serviço para HTTP.
 
-        Reimplmenta a rota
-        GET /api/AutenticacaoSgp/{login}/validarEmailExistente/{email}/
+        Reimplementa a rota
+        `GET /api/AutenticacaoSgp/{login}/validarEmailExistente/{email}/`
         do legado.
 
         Args:

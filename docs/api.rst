@@ -35,6 +35,9 @@ Autenticação
 .. automodule:: apps.autenticacao.keycloak_admin
    :members:
 
+.. automodule:: apps.autenticacao.services
+   :members:
+
 .. automodule:: apps.autenticacao.gatilho_auditoria
    :members:
 
@@ -57,4 +60,13 @@ Gestão de Usuário
    :members:
 
 .. automodule:: apps.gestao_usuario.api.serializers
+   :members:
+
+Autenticação SGP
+-------------------
+
+.. automodule:: apps.eol_autenticacao_sgp.api.views
+   :members:
+
+.. automodule:: apps.eol_autenticacao_sgp.api.serializers
    :members:
