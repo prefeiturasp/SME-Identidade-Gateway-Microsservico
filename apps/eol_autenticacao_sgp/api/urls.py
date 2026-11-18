@@ -2,12 +2,20 @@
 
 from django.urls import path
 
-from apps.eol_autenticacao_sgp.api import views
+from apps.eol_autenticacao_sgp.api.views import (
+    DadosUsuarioView,
+    ValidarEmailExistenteView,
+)
 
 urlpatterns = [
     path(
         "<str:login>/ValidarEmailExistente/<str:email>",
-        views.ValidarEmailExistenteView.as_view(),
+        ValidarEmailExistenteView.as_view(),
         name="validar-email-existente",
     ),
+    path(
+        "<str:login>/dados/",
+        DadosUsuarioView.as_view(),
+        name="eol-autenticacao-sgp-dados-usuario",
+    )
 ]

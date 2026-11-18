@@ -25,3 +25,12 @@ Funcionalidade: API - Sistemas
     Dado que possuo acesso à API de autenticação
     Quando realizo consulta de sistemas do usuário com API Key inválida
     Então retorna o status 401
+
+  Cenário: Validar que o endpoint de consulta de sistemas exige API Key
+    Quando consulto endpoint de consulta de sistemas sem API Key
+    Então endpoint de consulta de sistemas rejeita requisicao sem API Key
+
+  Cenário: Validar consulta de sistemas sem login
+    Dado que possuo acesso à API de autenticação
+    Quando realizo consulta de sistemas do usuário sem informar login
+    Então retorna o status 404

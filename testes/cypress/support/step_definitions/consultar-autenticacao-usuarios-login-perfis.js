@@ -18,6 +18,10 @@ When("realizo consulta de perfis do usuário com API Key inválida", () => {
   cy.getPerfisPorLogin({ apiKey: CHAVE_INVALIDA }).as("response");
 });
 
+When("realizo consulta de perfis do usuário sem informar login", () => {
+  cy.getPerfisPorLogin({ login: "" }).as("response");
+});
+
 And("o retorno deve conter a lista de perfis", () => {
   cy.get("@response").then((response) => {
     if (response.status === 200) {
@@ -102,4 +106,12 @@ And("as permissões do perfil devem ter estrutura válida", () => {
       });
     }
   });
+});
+
+When("consulto endpoint de consulta de perfis sem API Key", () => {
+  cy.chamarEndpointSwagger("perfis", { omitirApiKey: true }).as("response");
+});
+
+Then("endpoint de consulta de perfis rejeita requisicao sem API Key", () => {
+  cy.get("@response").then((response) => expect(response.status).to.eq(401));
 });

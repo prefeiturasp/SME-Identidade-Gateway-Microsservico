@@ -14,4 +14,5 @@ autenticacao
 gestao_usuario
 eol_autenticacao_sgp
 api
+eol_autenticacao_sgp
 ```

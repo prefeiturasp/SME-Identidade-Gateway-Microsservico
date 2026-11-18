@@ -18,6 +18,10 @@ When("realizo consulta de sistemas do usuário com API Key inválida", () => {
   cy.getSistemasPorLogin({ apiKey: CHAVE_INVALIDA }).as("response");
 });
 
+When("realizo consulta de sistemas do usuário sem informar login", () => {
+  cy.getSistemasPorLogin({ login: "" }).as("response");
+});
+
 And("o retorno deve conter a lista de sistemas", () => {
   cy.get("@response").then((response) => {
     if (response.status === 200) {
@@ -38,4 +42,12 @@ And("os sistemas do usuário devem ter estrutura válida", () => {
       });
     }
   });
+});
+
+When("consulto endpoint de consulta de sistemas sem API Key", () => {
+  cy.chamarEndpointSwagger("sistemas", { omitirApiKey: true }).as("response");
+});
+
+Then("endpoint de consulta de sistemas rejeita requisicao sem API Key", () => {
+  cy.get("@response").then((response) => expect(response.status).to.eq(401));
 });
