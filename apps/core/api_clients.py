@@ -12,6 +12,8 @@ from apps.core.http_client import ServiceClient
 DomainName = Literal[
     "token",
     "auditoria",
+    "etl",
+    "abrangencia",
 ]
 
 _CLIENTS: dict[DomainName, ServiceClient] = {}
@@ -47,5 +49,17 @@ def _client_factories() -> dict[DomainName, Callable[[], ServiceClient]]:
             dominio="auditoria",
             api_key=settings.API_KEY_AUDIT_MS,
             api_key_header=settings.API_KEY_AUDIT_MS_HEADER,
+        ),
+        "etl": lambda: ServiceClient(
+            base_url=settings.ETL_URL,
+            dominio="etl",
+            api_key=settings.API_KEY_ETL,
+            api_key_header=settings.API_KEY_ETL_HEADER,
+        ),
+        "abrangencia": lambda: ServiceClient(
+            base_url=settings.ABRANGENCIA_MS_URL,
+            dominio="abrangencia",
+            api_key=settings.API_KEY_ABRANGENCIA_MS,
+            api_key_header="X-API-Key",
         ),
     }
