@@ -15,7 +15,6 @@ from rest_framework.views import APIView
 from apps.autenticacao.api_key import AutenticacaoApiKey
 from apps.eol_autenticacao_sgp.api.serializers import DadosUsuarioSerializer
 from apps.eol_autenticacao_sgp.services import (
-    ConsultaCoreSSOError,
     ServicoDadosUsuario,
 )
 
@@ -69,12 +68,6 @@ class DadosUsuarioView(APIView):
 
         try:
             dados = servico.carregar(login)
-
-        except ConsultaCoreSSOError:
-            logger.exception(
-                "Falha ao consultar os dados do usuário no CoreSSO."
-            )
-            return Response(_ERRO_SQL, status=400)
 
         except Exception:
             logger.exception("Falha ao consultar os dados do usuário.")
