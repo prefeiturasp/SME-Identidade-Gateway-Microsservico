@@ -1,13 +1,24 @@
 """Adaptador do contrato legado para a recuperação no MS-Identidade."""
 
 import uuid
-from typing import Any, cast
+from dataclasses import asdict
+from typing import Any, NoReturn, cast
 from urllib.parse import urlsplit
 
 import httpx
 from django.conf import settings
 
 from apps.core.api_clients import get_api_client
+from apps.provedores.contratos import ProvedorIdentidade
+from apps.provedores.excecoes import (
+    AlteracaoSenhaRejeitadaError,
+    ContaNaoEncontradaError,
+    PoliticaSenhaIncompativelError,
+    ProvedorIndisponivelError,
+    SenhaForaPoliticaError,
+    SenhaNoHistoricoError,
+)
+from apps.provedores.fabrica import obter_provedor_identidade
 
 
 class RecuperacaoSenhaError(Exception):
@@ -103,54 +114,180 @@ def _chamar(
     return resultado
 
 
+def _provedor() -> ProvedorIdentidade:
+    """Seleciona a integração de identidade usada pelo Gateway.
+
+    Returns:
+        Provedor configurado, sem comunicação com o MS-Token.
+
+    Raises:
+        RecuperacaoSenhaError: Se o adaptador não puder ser carregado.
+    """
+    try:
+        return obter_provedor_identidade()
+    except ProvedorIndisponivelError as erro:
+        raise RecuperacaoSenhaError(
+            "Não foi possível concluir a recuperação de senha.", 502
+        ) from erro
+
+
 def solicitar(login: str, sistema: int) -> str:
-    """Encaminha a solicitação de recuperação ao MS-Token.
+    """Consulta a conta e solicita o envio do link ao MS-Token.
 
     Args:
-        login: Login cadastrado do usuário.
+        login: Login exato cadastrado no provedor.
         sistema: Código do sistema no cadastro de recuperação.
 
     Returns:
-        E-mail de destino informado pelo MS-Token após o envio do link.
-
-    Raises:
-        RecuperacaoSenhaError: Se a solicitação for rejeitada ou a
-            comunicação com o MS-Token falhar.
+        Endereço de e-mail informado pelo MS-Token após o envio.
     """
+    provedor = _provedor()
+    try:
+        conta = provedor.buscar_usuario_por_login(login)
+    except ProvedorIndisponivelError as erro:
+        raise RecuperacaoSenhaError(
+            "Não foi possível concluir a recuperação de senha.", 502
+        ) from erro
     return cast(
-        str, _chamar("RecuperarSenha/usuario", login, {"sistema": sistema})
+        str,
+        _chamar(
+            "solicitacoes",
+            {
+                "login": login,
+                "sistema": sistema,
+                "contexto": provedor.contexto,
+                "conta": asdict(conta) if conta else None,
+            },
+        ),
     )
 
 
 def validar(token: object) -> bool:
-    """Consulta a validade do código de recuperação no MS-Token.
+    """Consulta a validade local do código sem acessar o provedor.
 
     Args:
-        token: Código de recuperação recebido do consumidor.
+        token: UUID recebido do consumidor.
 
     Returns:
-        True se o código ainda puder ser usado; False se for inexistente,
-        expirado, substituído ou já utilizado.
+        Validade informada pelo MS-Token, sem consumir o código.
+    """
+    return cast(
+        bool,
+        _chamar(
+            "tokens/validar",
+            {"token": str(token), "contexto": _provedor().contexto},
+        ),
+    )
+
+
+def _informar_falha(
+    contexto: str, operacao_id: str, resultado: str, motivo: str = ""
+) -> NoReturn:
+    """Registra a falha sem liberar operações cujo resultado seja incerto.
+
+    Args:
+        contexto: Contexto da identidade.
+        operacao_id: Reserva emitida pelo MS-Token.
+        resultado: Rejeição confirmada ou resultado incerto.
+        motivo: Motivo neutro a ser convertido para o contrato legado.
 
     Raises:
-        RecuperacaoSenhaError: Se o MS-Token rejeitar a consulta ou houver
-            falha de comunicação. Essas falhas não são convertidas em False.
+        RecuperacaoSenhaError: Resultado de negócio ou falha de comunicação.
     """
-    return cast(bool, _chamar("RecuperarSenha/token/validar", str(token)))
+    _chamar(
+        "alteracoes/concluir",
+        {
+            "contexto": contexto,
+            "operacao_id": operacao_id,
+            "resultado": resultado,
+            "motivo": motivo,
+        },
+    )
+    raise RecuperacaoSenhaError(
+        "Não foi possível concluir a recuperação de senha.", 502
+    )
 
 
 def alterar(token: str, senha: str) -> str:
-    """Encaminha a definição da nova senha ao MS-Token.
+    """Orquestra a reserva, a alteração no provedor e a confirmação.
 
     Args:
-        token: Código de recuperação associado à conta.
+        token: UUID da solicitação de recuperação.
         senha: Nova senha informada pelo usuário.
 
     Returns:
-        Login informado pelo MS-Token após a alteração da senha.
+        Login confirmado pelo MS-Token após a troca.
 
     Raises:
-        RecuperacaoSenhaError: Se o código ou a senha forem rejeitados ou
-            houver falha de comunicação.
+        RecuperacaoSenhaError: Se a conta, a senha ou a comunicação falharem.
     """
-    return cast(str, _chamar("AlterarSenha", {"Token": token, "Senha": senha}))
+    provedor = _provedor()
+    contexto = provedor.contexto
+    consulta = _chamar(
+        "alteracoes/consultar", {"token": token, "contexto": contexto}
+    )
+    if not isinstance(consulta, dict) or not isinstance(
+        consulta.get("usuario_id"), str
+    ):
+        raise RecuperacaoSenhaError(
+            "Resposta inválida do serviço de identidade.", 502
+        )
+    try:
+        conta = provedor.obter_usuario(consulta["usuario_id"])
+    except ContaNaoEncontradaError as erro:
+        raise RecuperacaoSenhaError(
+            "Usuário ou senha incorretos.", 401
+        ) from erro
+    except ProvedorIndisponivelError as erro:
+        raise RecuperacaoSenhaError(
+            "Não foi possível concluir a recuperação de senha.", 502
+        ) from erro
+    operacao_id = str(uuid.uuid4())
+    reserva = _chamar(
+        "alteracoes/reservar",
+        {
+            "contexto": contexto,
+            "token": token,
+            "senha": senha,
+            "conta": asdict(conta),
+            "operacao_id": operacao_id,
+        },
+    )
+    if (
+        not isinstance(reserva, dict)
+        or reserva.get("operacao_id") != operacao_id
+        or reserva.get("usuario_id") != conta.id
+    ):
+        raise RecuperacaoSenhaError(
+            "Resposta inválida do serviço de identidade.", 502
+        )
+    try:
+        provedor.preparar_alteracao_senha(conta.id, historico_minimo=5)
+    except PoliticaSenhaIncompativelError:
+        _informar_falha(contexto, operacao_id, "rejeitada", "politica")
+    except ContaNaoEncontradaError:
+        _informar_falha(contexto, operacao_id, "rejeitada", "conta")
+    except ProvedorIndisponivelError:
+        # A chamada de alteração de senha ainda não foi iniciada.
+        _informar_falha(contexto, operacao_id, "rejeitada", "indisponivel")
+    try:
+        provedor.alterar_senha(conta.id, senha)
+    except SenhaNoHistoricoError:
+        _informar_falha(contexto, operacao_id, "rejeitada", "historico")
+    except SenhaForaPoliticaError:
+        _informar_falha(contexto, operacao_id, "rejeitada", "padrao")
+    except AlteracaoSenhaRejeitadaError:
+        _informar_falha(contexto, operacao_id, "rejeitada", "indisponivel")
+    except ProvedorIndisponivelError:
+        _informar_falha(contexto, operacao_id, "incerta")
+    return cast(
+        str,
+        _chamar(
+            "alteracoes/concluir",
+            {
+                "contexto": contexto,
+                "operacao_id": operacao_id,
+                "resultado": "sucesso",
+            },
+        ),
+    )
