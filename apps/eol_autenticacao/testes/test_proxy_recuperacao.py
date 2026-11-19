@@ -19,7 +19,7 @@ BASE = "/identidade-gateway/api/v1/eol-autenticacao/"
 def test_solicitar_aceita_cliente_sgp(media: str) -> None:
     """Usa a chave padrão e repassa login e sistema sem dados locais."""
     with patch(
-        "apps.eol_autenticacao.recuperacao_senha.get_api_client"
+        "apps.eol_autenticacao.services.recuperacao_senha.get_api_client"
     ) as obter:
         obter.return_value.post.return_value = httpx.Response(
             200, json="usuario@example.com"
@@ -42,7 +42,7 @@ def test_solicitar_aceita_cliente_sgp(media: str) -> None:
 def test_alterar_com_formulario_e_barra_final(final: str) -> None:
     """Repassa o formulário usado pelo backend do SGP e devolve o login."""
     with patch(
-        "apps.eol_autenticacao.recuperacao_senha.get_api_client"
+        "apps.eol_autenticacao.services.recuperacao_senha.get_api_client"
     ) as obter:
         obter.return_value.post.return_value = httpx.Response(
             200, json="1234567"
@@ -65,7 +65,7 @@ def test_alterar_com_formulario_e_barra_final(final: str) -> None:
 def test_validar_preserva_booleano_e_media_type_sgp() -> None:
     """A consulta devolve falso como JSON booleano, sem envelope."""
     with patch(
-        "apps.eol_autenticacao.recuperacao_senha.get_api_client"
+        "apps.eol_autenticacao.services.recuperacao_senha.get_api_client"
     ) as obter:
         obter.return_value.post.return_value = httpx.Response(200, json=False)
         resposta = APIClient().post(
@@ -82,7 +82,7 @@ def test_validar_preserva_booleano_e_media_type_sgp() -> None:
 def test_preserva_erro_negocio() -> None:
     """Mantém o status e a mensagem do serviço responsável pela recuperação."""
     with patch(
-        "apps.eol_autenticacao.recuperacao_senha.get_api_client"
+        "apps.eol_autenticacao.services.recuperacao_senha.get_api_client"
     ) as obter:
         obter.return_value.post.return_value = httpx.Response(
             401, json="Token inválido ou expirado."
@@ -114,7 +114,7 @@ def test_exige_api_key_padrao_sem_chamar_ms_token(
 ) -> None:
     """Rejeita chave ausente, inválida ou enviada só no header legado."""
     with patch(
-        "apps.eol_autenticacao.recuperacao_senha.get_api_client"
+        "apps.eol_autenticacao.services.recuperacao_senha.get_api_client"
     ) as obter:
         resposta = APIClient().post(
             f"{BASE}{operacao}",
@@ -129,7 +129,7 @@ def test_exige_api_key_padrao_sem_chamar_ms_token(
 def test_respeita_cabecalho_configurado() -> None:
     """Usa API_KEY_HEADER como no endpoint de validação de e-mail."""
     with patch(
-        "apps.eol_autenticacao.recuperacao_senha.get_api_client"
+        "apps.eol_autenticacao.services.recuperacao_senha.get_api_client"
     ) as obter:
         obter.return_value.post.return_value = httpx.Response(
             200, json="usuario@example.com"

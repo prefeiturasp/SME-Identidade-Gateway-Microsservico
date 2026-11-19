@@ -56,7 +56,7 @@ EOL Autenticação
 .. automodule:: apps.eol_autenticacao.api.views
    :members:
 
-.. automodule:: apps.eol_autenticacao.recuperacao_senha
+.. automodule:: apps.eol_autenticacao.services.recuperacao_senha
    :members:
 
 Gestão de Usuário

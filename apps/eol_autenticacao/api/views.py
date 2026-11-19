@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.autenticacao.api_key import AutenticacaoApiKey
-from apps.eol_autenticacao import recuperacao_senha as recuperacao
+from apps.eol_autenticacao.services import recuperacao_senha as recuperacao
 
 
 @extend_schema_field({"type": "string", "example": ""})
