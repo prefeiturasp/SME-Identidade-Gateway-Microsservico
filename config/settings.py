@@ -84,6 +84,10 @@ REST_FRAMEWORK = {
 API_KEY = os.getenv("API_KEY", "")
 API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
 
+PROVEDOR_IDENTIDADE = os.getenv(
+    "PROVEDOR_IDENTIDADE", "apps.provedores.keycloak.ProvedorKeycloak"
+)
+
 # SME-Identidade-Token-Microsservico — destino do roteamento de
 # perfis/níveis de acesso (apps.autenticacao) e do health check
 # estendido (apps.core.clientes.token_ms).
