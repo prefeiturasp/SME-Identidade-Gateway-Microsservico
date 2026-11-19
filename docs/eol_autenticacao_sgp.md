@@ -82,7 +82,7 @@ O gateway exige sua API Key habitual (`API_KEY`, no header definido por
 `login` informa o RF ou CPF do usuário a excluir da busca; `email` deve ser um
 endereço válido e completo. O gateway remove espaços externos e consulta o
 Keycloak, preservando a caixa do e-mail. A resolução do login reutiliza a busca
-existente por username, RF, CPF ou e-mail.
+existente por username(RF, CPF).
 
 A verificação considera todas as contas do realm configurado, inclusive
 inativas e com e-mail não verificado. A conta identificada pelo login é excluída
