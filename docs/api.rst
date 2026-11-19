@@ -35,6 +35,9 @@ Autenticação
 .. automodule:: apps.autenticacao.keycloak_admin
    :members:
 
+.. automodule:: apps.autenticacao.services
+   :members:
+
 .. automodule:: apps.autenticacao.gatilho_auditoria
    :members:
 

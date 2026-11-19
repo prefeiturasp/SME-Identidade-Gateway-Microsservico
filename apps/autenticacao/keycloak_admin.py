@@ -21,7 +21,13 @@ from typing import Any
 from django.conf import settings
 from jwcrypto.jwt import JWTExpired
 from keycloak import KeycloakOpenID
-from keycloak.exceptions import KeycloakAuthenticationError, KeycloakPostError
+from keycloak.exceptions import (
+    KeycloakAuthenticationError,
+    KeycloakError,
+    KeycloakPostError,
+)
+
+from apps.autenticacao.services import ConsultaUsuariosIndisponivelError
 
 ERRO_USUARIO_NAO_ENCONTRADO = "usuário não encontrado"
 _TOKEN_TYPE_BEARER = "Bearer"
@@ -527,3 +533,33 @@ def _obter_erro_autenticacao_client(
         return "Client ID ou Client Secret inválidos."
 
     return "Não foi possível autenticar o client no Keycloak."
+
+
+class ConsultaUsuariosKeycloak:
+    """Consultas do Keycloak seguindo contrato da aplicação."""
+
+    def __init__(self) -> None:
+        self._admin: Any = None
+
+    def _obter_admin(self) -> Any:
+        if self._admin is None:
+            self._admin = obter_admin_keycloak()
+        return self._admin
+
+    def obter_id_por_login(self, login: str) -> str | None:
+        """Resolve login para o ID da conta."""
+        try:
+            conta = buscar_usuario_por_login(self._obter_admin(), login)
+        except KeycloakError as exc:
+            raise ConsultaUsuariosIndisponivelError from exc
+        return str(conta["id"]) if conta is not None else None
+
+    def listar_ids_por_email(self, email: str) -> list[str]:
+        """Consulta todas as contas do realm com o e-mail exato."""
+        try:
+            contas = self._obter_admin().get_users(
+                query={"email": email, "exact": True}
+            )
+        except KeycloakError as exc:
+            raise ConsultaUsuariosIndisponivelError from exc
+        return [str(conta["id"]) for conta in contas]
