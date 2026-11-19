@@ -94,7 +94,7 @@ class ServiceClient:
     def post(
         self,
         path: str,
-        payload: dict | list | None = None,
+        payload: dict | list | str | None = None,
         params: dict | None = None,
     ) -> httpx.Response:
         """Executa uma requisição POST.
