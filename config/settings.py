@@ -135,6 +135,7 @@ KEYCLOAK_LOGIN_CLIENT_ID = os.getenv(
     "KEYCLOAK_LOGIN_CLIENT_ID", "auto-servico-qa"
 )
 KEYCLOAK_LOGIN_CLIENT_SECRET = os.getenv("KEYCLOAK_LOGIN_CLIENT_SECRET", "")
+KEYCLOAK_SUFIXO_CLIENT = os.getenv("KEYCLOAK_SUFIXO_CLIENT", "")
 
 # SME-Identidade-ETL — destino da gestão de usuário (criação,
 # sincronização, concessão de acesso e consulta de identidade). O

@@ -1,7 +1,13 @@
 """Caminhos completos dos endpoints legados de autenticação."""
 
-from django.urls import URLPattern
+from django.urls import path
 
-app_name = "eol_autenticacao"
+from apps.eol_autenticacao.api.views import AutenticacaoExternaView
 
-urlpatterns: list[URLPattern] = []
+urlpatterns = [
+    path(
+        "externa/",
+        AutenticacaoExternaView.as_view(),
+        name="eol-autenticacao-externa",
+    ),
+]
