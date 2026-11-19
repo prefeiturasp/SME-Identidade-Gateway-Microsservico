@@ -1,6 +1,5 @@
 # language: pt
 
-@admin-ui
 Funcionalidade: Tela de login do painel administrativo
 
   Contexto:
@@ -21,7 +20,6 @@ Funcionalidade: Tela de login do painel administrativo
     Quando alterno a exibição da senha
     Então a senha deve ficar oculta
 
-  @requires-auth
   Cenário: Entrar no painel com credenciais válidas
     Quando preencho as credenciais cadastradas
     E envio o formulário de login
