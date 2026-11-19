@@ -50,6 +50,15 @@ Autenticação
 .. automodule:: apps.autenticacao.api.serializers
    :members:
 
+EOL Autenticação
+---------------------
+
+.. automodule:: apps.eol_autenticacao.api.views
+   :members:
+
+.. automodule:: apps.eol_autenticacao.recuperacao_senha
+   :members:
+
 Gestão de Usuário
 ------------------
 
