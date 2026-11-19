@@ -59,6 +59,23 @@ EOL Autenticação
 .. automodule:: apps.eol_autenticacao.services.recuperacao_senha
    :members:
 
+Provedores de identidade
+------------------------------
+
+.. automodule:: apps.provedores.contratos
+   :members: ProvedorIdentidade
+
+.. autoclass:: apps.provedores.contratos.UsuarioIdentidade
+
+.. automodule:: apps.provedores.excecoes
+   :members:
+
+.. automodule:: apps.provedores.fabrica
+   :members:
+
+.. automodule:: apps.provedores.keycloak
+   :members:
+
 Gestão de Usuário
 ------------------
 
