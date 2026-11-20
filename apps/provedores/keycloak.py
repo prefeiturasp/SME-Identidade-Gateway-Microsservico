@@ -2,7 +2,7 @@
 
 import re
 from collections.abc import Callable
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from django.conf import settings
 from keycloak.exceptions import (
@@ -21,8 +21,6 @@ from apps.provedores.excecoes import (
     SenhaForaPoliticaError,
     SenhaNoHistoricoError,
 )
-
-T = TypeVar("T")
 
 
 class ProvedorKeycloak:
@@ -52,7 +50,7 @@ class ProvedorKeycloak:
             self._admin = obter_admin_keycloak(max_retries=0)
         return self._admin
 
-    def _executar(self, operacao: Callable[[], T]) -> T:
+    def _executar[T](self, operacao: Callable[[], T]) -> T:
         """Traduz falhas técnicas sem expor exceções do SDK.
 
         Args:
