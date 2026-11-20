@@ -434,6 +434,7 @@ class TestObterAdminKeycloak(SimpleTestCase):
             realm_name="master",
             user_realm_name="master",
             verify=False,
+            max_retries=1,
         )
 
 

@@ -12,6 +12,7 @@ Sua função é validar identidades, processar credenciais, propagar contexto au
 
 autenticacao
 gestao_usuario
+eol_autenticacao
 eol_autenticacao_sgp
 api
 ```

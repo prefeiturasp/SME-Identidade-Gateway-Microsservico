@@ -5,11 +5,12 @@ Reaproveita o mesmo padrão de conexão do SME-Identidade-ETL
 mantendo um único jeito de instanciar ``KeycloakAdmin`` na
 plataforma SME-Identidade.
 
-As rotas de recuperação/alteração de senha e alteração de e-mail
-delegam integralmente ao Keycloak — não reimplementam geração de
-token de recuperação nem envio de e-mail, usam os mecanismos nativos
-(``send_update_account``, ``set_user_password``) já providos pelo
-Keycloak, evitando duplicar lógica de segurança sensível.
+As operações nativas deste módulo usam ``send_update_account``,
+``set_user_password`` e os demais recursos do Keycloak.
+
+O fluxo de recuperação compatível com o legado reutiliza este cliente
+pelo adaptador ``apps.provedores.keycloak``. Nesse fluxo, os códigos
+de recuperação e o envio de e-mail são gerenciados pelo MS-Token.
 """
 
 from __future__ import annotations
@@ -33,8 +34,12 @@ ERRO_USUARIO_NAO_ENCONTRADO = "usuário não encontrado"
 _TOKEN_TYPE_BEARER = "Bearer"
 
 
-def obter_admin_keycloak() -> Any:
+def obter_admin_keycloak(*, max_retries: int = 1) -> Any:
     """Retorna um cliente Keycloak Admin autenticado.
+
+    Args:
+        max_retries: Repetições de transporte permitidas pelo SDK.
+            Use zero para operações cujo resultado pode ser incerto.
 
     Returns:
         Instância de ``KeycloakAdmin`` conectada ao realm
@@ -49,6 +54,7 @@ def obter_admin_keycloak() -> Any:
         realm_name=settings.KEYCLOAK_REALM,
         user_realm_name="master",
         verify=settings.KEYCLOAK_VERIFICAR_SSL,
+        max_retries=max_retries,
     )
 
 

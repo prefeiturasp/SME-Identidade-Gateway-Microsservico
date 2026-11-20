@@ -1,5 +1,9 @@
 # Autenticação e Níveis de Acesso
 
+Esta página descreve os contratos próprios de autenticação e acesso do
+Gateway. A recuperação de senha com o contrato legado está documentada
+em [EOL Autenticação](eol_autenticacao.md).
+
 Definido em `apps/autenticacao/`. Todas as rotas exigem `AutenticacaoApiKey`
 (header configurável, comparado a `settings.API_KEY` — mesmo padrão usado no
 SME-Identidade-ETL).
