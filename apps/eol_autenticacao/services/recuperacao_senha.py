@@ -20,6 +20,9 @@ from apps.provedores.excecoes import (
 )
 from apps.provedores.fabrica import obter_provedor_identidade
 
+RESPOSTA_IDENTIDADE_INVALIDA = "Resposta inválida do serviço de identidade."
+FALHA_RECUPERACAO_SENHA = "Não foi possível concluir a recuperação de senha."
+
 
 class RecuperacaoSenhaError(Exception):
     """Representa uma falha na operação de recuperação.
@@ -100,14 +103,14 @@ def _chamar(
         resultado = resposta.json()
     except ValueError as erro:
         raise RecuperacaoSenhaError(
-            "Resposta inválida do serviço de identidade.", 502
+            RESPOSTA_IDENTIDADE_INVALIDA, 502
         ) from erro
     if resposta.status_code != 200:
         raise RecuperacaoSenhaError(
             (
                 resultado
                 if isinstance(resultado, str)
-                else "Não foi possível concluir a recuperação de senha."
+                else FALHA_RECUPERACAO_SENHA
             ),
             resposta.status_code,
         )
@@ -126,9 +129,7 @@ def _provedor() -> ProvedorIdentidade:
     try:
         return obter_provedor_identidade()
     except ProvedorIndisponivelError as erro:
-        raise RecuperacaoSenhaError(
-            "Não foi possível concluir a recuperação de senha.", 502
-        ) from erro
+        raise RecuperacaoSenhaError(FALHA_RECUPERACAO_SENHA, 502) from erro
 
 
 def solicitar(login: str, sistema: int) -> str:
@@ -145,9 +146,7 @@ def solicitar(login: str, sistema: int) -> str:
     try:
         conta = provedor.buscar_usuario_por_login(login)
     except ProvedorIndisponivelError as erro:
-        raise RecuperacaoSenhaError(
-            "Não foi possível concluir a recuperação de senha.", 502
-        ) from erro
+        raise RecuperacaoSenhaError(FALHA_RECUPERACAO_SENHA, 502) from erro
     return cast(
         str,
         _chamar(
@@ -203,9 +202,7 @@ def _informar_falha(
             "motivo": motivo,
         },
     )
-    raise RecuperacaoSenhaError(
-        "Não foi possível concluir a recuperação de senha.", 502
-    )
+    raise RecuperacaoSenhaError(FALHA_RECUPERACAO_SENHA, 502)
 
 
 def alterar(token: str, senha: str) -> str:
@@ -229,9 +226,7 @@ def alterar(token: str, senha: str) -> str:
     if not isinstance(consulta, dict) or not isinstance(
         consulta.get("usuario_id"), str
     ):
-        raise RecuperacaoSenhaError(
-            "Resposta inválida do serviço de identidade.", 502
-        )
+        raise RecuperacaoSenhaError(RESPOSTA_IDENTIDADE_INVALIDA, 502)
     try:
         conta = provedor.obter_usuario(consulta["usuario_id"])
     except ContaNaoEncontradaError as erro:
@@ -239,9 +234,7 @@ def alterar(token: str, senha: str) -> str:
             "Usuário ou senha incorretos.", 401
         ) from erro
     except ProvedorIndisponivelError as erro:
-        raise RecuperacaoSenhaError(
-            "Não foi possível concluir a recuperação de senha.", 502
-        ) from erro
+        raise RecuperacaoSenhaError(FALHA_RECUPERACAO_SENHA, 502) from erro
     operacao_id = str(uuid.uuid4())
     reserva = _chamar(
         "alteracoes/reservar",
@@ -258,9 +251,7 @@ def alterar(token: str, senha: str) -> str:
         or reserva.get("operacao_id") != operacao_id
         or reserva.get("usuario_id") != conta.id
     ):
-        raise RecuperacaoSenhaError(
-            "Resposta inválida do serviço de identidade.", 502
-        )
+        raise RecuperacaoSenhaError(RESPOSTA_IDENTIDADE_INVALIDA, 502)
     try:
         provedor.preparar_alteracao_senha(conta.id, historico_minimo=5)
     except PoliticaSenhaIncompativelError:
